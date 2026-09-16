@@ -6,13 +6,13 @@ substitutions:
   # Enables the corresponding cat sensors.
   # Add or remove up to 5 cats as needed.
   cats:
-    - "Cat 1"
-    - "Cat 2"
+    - "Lucy"
+    - "Osiris"
 
   # Timezone of the device, used for daily visits sensors
   # See https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
   # for valid values, e.g. "Europe/Bucharest", "America/New_York", "GMT0"
-  timezone: "GMT0"
+  timezone: "Australia/Melbourne"
 
 
   ## Internal parameters
