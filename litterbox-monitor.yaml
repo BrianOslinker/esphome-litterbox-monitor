@@ -171,7 +171,7 @@ esphome:
   friendly_name: Litterbox
   comment: Smart Litterbox
   includes:
-    - state_analyzer.h
+    - /Users/oz/Library/CloudStorage/OneDrive-LATROBEUNIVERSITY/💻 Code/esphome-litterbox-monitor
   project:
     name: "CristianChelu.LitterboxMonitor"
     version: "esp32.hx711"
