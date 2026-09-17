@@ -189,6 +189,7 @@ esp32:
   framework:
     type: esp-idf
 
+  variant: ESP32
 logger:
   level: INFO
 
