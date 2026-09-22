@@ -191,7 +191,7 @@ esp32:
 
   variant: ESP32
 logger:
-  level: INFO
+  level: DEBUG
 
 api:
   encryption:
