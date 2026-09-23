@@ -179,6 +179,9 @@ esphome:
     priority: -100
     then:
       - script.execute: configure_box_monitor
+      - text_sensor.template.publish:
+          id: calibration_status
+          state: "Ready: next press tares (board empty)"
       # The analyzer only runs inside an event, so its sensor would sit
       # unpublished until the first visit ended. With no event open it is
       # empty by definition, so say so rather than leaving it unknown.
@@ -760,6 +763,13 @@ text_sensor:
     icon: "mdi:tray"
     entity_category: diagnostic
     update_interval: never
+  # What the next Calibrate Scale press will do, or why the last step failed.
+  - platform: template
+    id: calibration_status
+    name: "Calibration Status"
+    icon: "mdi:scale-balance"
+    entity_category: diagnostic
+    update_interval: never
 
 event:
   # Fired once per maintenance event, after the counters are updated.
@@ -1182,6 +1192,10 @@ script:
   # Calibration related scripts
   - id: calibrate_tare
     then:
+      - script.stop: calibration_tare_expiry
+      - text_sensor.template.publish:
+          id: calibration_status
+          state: "Taring: keep the board still"
       - logger.log:
           level: INFO
           tag: calibration
@@ -1199,16 +1213,31 @@ script:
             - logger.log:
                 level: INFO
                 tag: calibration
-                format: "Place known weight and execute 'Calibrate Weight'"
+                format: "Place the known weight and press Calibrate Scale again"
+            - text_sensor.template.publish:
+                id: calibration_status
+                state: "Tared: add the known weight, then press again"
+            - script.execute: calibration_tare_expiry
           else:
             - logger.log:
                 level: ERROR
                 tag: calibration
                 format: "Failed to capture tare value due to instability. Try again."
+            # Next press tares again, not measures against an older tare.
+            - globals.set:
+                id: calibration_tare_temp
+                value: "0.0"
+            - text_sensor.template.publish:
+                id: calibration_status
+                state: "Tare failed (board moved): press again to retry"
   - id: calibrate_weight
     parameters:
       known_weight_kg: float
     then:
+      - script.stop: calibration_tare_expiry
+      - text_sensor.template.publish:
+          id: calibration_status
+          state: "Measuring: keep the weight still"
       - logger.log:
           level: INFO
           tag: calibration
@@ -1237,6 +1266,9 @@ script:
                 id(calibration_last_performed).update();
 
                 ESP_LOGI("calibration", "New tare: %.2f, New coefficient: %.2f", id(calibration_tare), new_coefficient);
+            - text_sensor.template.publish:
+                id: calibration_status
+                state: "Calibrated: next press starts over with a tare"
           else:
             - logger.log:
                 level: ERROR
@@ -1245,3 +1277,22 @@ script:
             - globals.set:
                 id: calibration_tare_temp
                 value: "0.0"
+            - text_sensor.template.publish:
+                id: calibration_status
+                state: "Weight step failed (moved): press again to re-tare"
+  # A tare left waiting goes stale: the zero drifts, and a second press days
+  # later would calibrate against it.
+  - id: calibration_tare_expiry
+    mode: restart
+    then:
+      - delay: 15min
+      - if:
+          condition:
+            lambda: !lambda return id(calibration_tare_temp) != 0.0;
+          then:
+            - globals.set:
+                id: calibration_tare_temp
+                value: "0.0"
+            - text_sensor.template.publish:
+                id: calibration_status
+                state: "Tare expired (15 min): press again to re-tare"
