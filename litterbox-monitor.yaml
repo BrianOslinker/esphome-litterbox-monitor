@@ -143,9 +143,10 @@ globals:
     initial_value: "false"
     restore_value: False
 
-  # Timestamp of event start (activity first detected)
+  # millis() at event start (activity first detected). Not the wall clock:
+  # the first time sync after boot can land mid-event and skew the duration.
   - id: event_start
-    type: time_t
+    type: uint32_t
     initial_value: "0"
     restore_value: False
   
@@ -1025,7 +1026,7 @@ script:
       - lambda: !lambda |-
           if (id(event_open)) return;
           id(event_open) = true;
-          id(event_start) = id(homeassistant_time).now().timestamp;
+          id(event_start) = millis();
           get_analyzer().init(id(cat_weights), 5);
           get_weight_buf().reset();
           get_analyzer().attach_buffer(&get_weight_buf());
@@ -1045,7 +1046,7 @@ script:
           id(event_open) = false;
 
           time_t now = id(homeassistant_time).now().timestamp;
-          int duration = now - id(event_start);
+          int duration = (millis() - id(event_start)) / 1000;
           int samples = get_sample_idx();
           bool long_enough = duration >= 10 && samples >= 100;
           // Where the scale sits now, relative to the start of the event.
@@ -1300,7 +1301,10 @@ script:
                 id(calibration_tare) = id(calibration_tare_temp);
                 id(calibration_coefficient) = new_coefficient;
                 id(calibration_tare_temp) = 0;
-                id(calibration_timestamp) = id(homeassistant_time).now().timestamp;
+                // Unsynced clock reads as seconds-since-boot. Unknown beats 1970.
+                auto now = id(homeassistant_time).now();
+                id(calibration_timestamp) = now.is_valid() ? now.timestamp : 0;
+                if (!now.is_valid()) ESP_LOGW("calibration", "Clock not synced; calibration date not recorded");
                 id(calibration_last_performed).update();
 
                 ESP_LOGI("calibration", "New tare: %.2f, New coefficient: %.2f", id(calibration_tare), new_coefficient);
