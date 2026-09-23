@@ -644,6 +644,8 @@ sensor:
     name: "Litter Remaining"
     icon: "mdi:tray-full"
     accuracy_decimals: 2
+    on_value:
+      - lambda: 'if (!std::isnan(x)) id(saved_litter_weight) = x;'
   # Litter remaining as a share of a full box.
   - platform: template
     id: litter_level
@@ -700,6 +702,8 @@ sensor:
     accuracy_decimals: 0
     update_interval: never
     state_class: measurement
+    on_value:
+      - lambda: 'if (!std::isnan(x)) id(saved_visits) = x;'
   # NAN until the first reset ("0 days" would claim a deadline nobody set),
   # fractional so the last day still counts down, negative once overdue —
   # clamping at 0 made "expired yesterday" and "expired last month" read
@@ -822,6 +826,7 @@ number:
     unit_of_measurement: "d"
     optimistic: true
     initial_value: "30"
+    restore_value: True
     entity_category: config
   - platform: template
     name: "Calibration Known Weight"
