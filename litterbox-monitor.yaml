@@ -207,8 +207,7 @@ esphome:
       # unpublished until the first visit ended. With no event open it is
       # empty by definition, so say so rather than leaving it unknown.
       - lambda: 'id(state_machine_state).publish_state("empty");'
-      # Put back the running totals, and say "no cat" rather than unknown
-      # until the first event (that's what Cat Weight reads between events).
+      # Put back the running totals.
       - lambda: !lambda |-
           if (!std::isnan(id(saved_visits))) {
             id(visits).publish_state(id(saved_visits));
@@ -219,7 +218,6 @@ esphome:
           if (!std::isnan(id(saved_litter_weight))) {
             id(litter_weight).publish_state(id(saved_litter_weight));
           }
-          id(current_cat_weight).publish_state(0);
       # Its first poll ran before Litter Remaining was restored.
       - component.update: litter_level
 
@@ -1230,7 +1228,6 @@ script:
           }
 
           id(cat_detected).publish_state(false);
-          id(current_cat_weight).publish_state(0);
           id(event_start) = 0;
           if (box.kind != BoxEventKind::NONE) {
             id(maintenance_event).trigger(box_event_str(box.kind));
