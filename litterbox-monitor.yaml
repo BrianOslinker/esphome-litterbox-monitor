@@ -219,10 +219,8 @@ esphome:
             id(litter_weight).publish_state(id(saved_litter_weight));
           }
           id(current_cat_weight).publish_state(0);
-      # Lambda sensors would otherwise wait out their first 60 s interval.
+      # Its first poll ran before Litter Remaining was restored.
       - component.update: litter_level
-      - component.update: deep_clean_due
-      - component.update: calibration_last_performed
 
 esp32:
   board: esp32dev
