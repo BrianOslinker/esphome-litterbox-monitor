@@ -314,7 +314,9 @@ sensor:
     state_class: measurement
     accuracy_decimals: 2
     unit_of_measurement: kg
-    lambda: !lambda return id(cat_weights)[0];
+    # 0 is the "not set" marker everywhere else; unknown until set_cat_weight
+    # (or a learned visit) gives this cat a weight.
+    lambda: !lambda 'return id(cat_weights)[0] > 0.0f ? id(cat_weights)[0] : NAN;'
     internal: False
     update_interval: 1s
   - platform: template
@@ -325,7 +327,7 @@ sensor:
     state_class: measurement
     accuracy_decimals: 2
     unit_of_measurement: kg
-    lambda: !lambda return id(cat_weights)[1];
+    lambda: !lambda 'return id(cat_weights)[1] > 0.0f ? id(cat_weights)[1] : NAN;'
     internal: ${cats|length <= 1 or cats[1] == ""}
     update_interval: 1s
   - platform: template
@@ -336,7 +338,7 @@ sensor:
     state_class: measurement
     accuracy_decimals: 2
     unit_of_measurement: kg
-    lambda: !lambda return id(cat_weights)[2];
+    lambda: !lambda 'return id(cat_weights)[2] > 0.0f ? id(cat_weights)[2] : NAN;'
     internal: ${cats|length <= 2 or cats[2] == ""}
     update_interval: 1s
   - platform: template
@@ -347,7 +349,7 @@ sensor:
     state_class: measurement
     accuracy_decimals: 2
     unit_of_measurement: kg
-    lambda: !lambda return id(cat_weights)[3];
+    lambda: !lambda 'return id(cat_weights)[3] > 0.0f ? id(cat_weights)[3] : NAN;'
     internal: ${cats|length <= 3 or cats[3] == ""}
     update_interval: 1s
   - platform: template
@@ -358,7 +360,7 @@ sensor:
     state_class: measurement
     accuracy_decimals: 2
     unit_of_measurement: kg
-    lambda: !lambda return id(cat_weights)[4];
+    lambda: !lambda 'return id(cat_weights)[4] > 0.0f ? id(cat_weights)[4] : NAN;'
     internal: ${cats|length <= 4 or cats[4] == ""}
     update_interval: 1s
   - platform: template
