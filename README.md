@@ -238,6 +238,10 @@ That's it — the monitor is ready to use.
 - `set_cat_weight`: Set a cat's weight manually via Home Assistant or API.
   - Parameters: `cat` (int, 1-5), `weight` (float, kg, 0-20; 0 clears the slot)
   - Example: To set Cat 1's weight to 5.2kg, call `set_cat_weight` with `cat=1`, `weight=5.2`.
+- `correct_calibration_weight`: Fix a calibration that was done with the wrong
+  known weight entered, without redoing it.
+  - Parameters: `entered_g` (float, what Calibration Known Weight said),
+    `actual_g` (float, what the weights really weighed)
 
 ### Synchronize Multiple Litterboxes
 
