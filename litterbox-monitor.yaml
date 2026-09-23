@@ -983,6 +983,25 @@ button:
                 known_weight_kg: !lambda return id(calibration_known_weight).state / 1000.0;
 
 script:
+  # Zero the daily counters once the date has moved on. Runs at midnight and
+  # on every clock sync, so a midnight spent powered off still gets its reset.
+  - id: roll_daily_counters
+    then:
+      - lambda: !lambda |-
+          auto now = id(homeassistant_time).now();
+          if (!now.is_valid()) return;
+          int today = now.year * 1000 + now.day_of_year;
+          if (today == id(daily_counters_day)) return;
+          // Unset (first boot with this): today's counts are today's.
+          if (id(daily_counters_day) != 0) {
+            for (int i = 0; i < 5; i++) {
+              id(cat_daily_visits)[i] = 0;
+              id(cat_daily_pees)[i] = 0;
+              id(cat_daily_poops)[i] = 0;
+            }
+          }
+          id(daily_counters_day) = today;
+
   # Push the box thresholds into the tracker. Runs at boot and whenever the
   # Empty Box Weight setting changes.
   - id: configure_box_monitor
