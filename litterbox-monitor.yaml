@@ -772,6 +772,7 @@ sensor:
     id: calibration_last_performed
     name: "Calibration Last Performed"
     icon: mdi:calendar-clock
+    entity_category: diagnostic
     device_class: timestamp
     lambda: !lambda |-
       time_t timestamp = id(calibration_timestamp);
@@ -1047,6 +1048,7 @@ button:
   - platform: template
     name: "Calibrate Scale"
     icon: mdi:scale-bathroom
+    entity_category: config
     on_press:
       - if:
           condition:
