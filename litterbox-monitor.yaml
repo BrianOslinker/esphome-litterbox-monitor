@@ -629,6 +629,11 @@ sensor:
     disabled_by_default: True
   - platform: template
     unit_of_measurement: kg
+    # A few grams under zero is two readings of an empty box disagreeing,
+    # not negative litter.
+    filters:
+      - clamp:
+          min_value: 0
     id: litter_weight
     name: "Litter Remaining"
     icon: "mdi:tray-full"
@@ -1010,6 +1015,14 @@ script:
           get_sample_idx() = 0;
           get_box_monitor().begin_event((id(tare_value) + id(auto_tare_value)) * 1000.0f);
           ESP_LOGD("SA", "Event start, analyzer reset");
+      # The inactivity timeout is otherwise only armed when vibration stops,
+      # so an event opened over a box that is already still (re-opened for
+      # "still on the scale, waiting for it to leave") would never close.
+      - if:
+          condition:
+            binary_sensor.is_off: vibration_detected
+          then:
+            - script.execute: event_timeout
 
   # Close the event: score the visit, work out what happened to the box,
   # then tare. Runs when activity drops, on the inactivity timeout, and when
@@ -1144,7 +1157,9 @@ script:
           // event (the cat leaving) add the waste. Once only: something that
           // holds this still through two timeouts is not a cat.
           bool cat_inside = false;
-          if (box.kind == BoxEventKind::NONE && long_enough) {
+          // With the box off the board there is nothing to judge a visit
+          // or waste by: taking it away is maintenance, not a cat.
+          if (box.kind == BoxEventKind::NONE && long_enough && !box.absent) {
             float min_cat_kg = 0.0f;
             for (int i = 0; i < 5; i++) {
               float w = id(cat_weights)[i];
