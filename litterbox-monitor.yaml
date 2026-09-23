@@ -103,6 +103,22 @@ globals:
     type: time_t
     initial_value: "0"
     restore_value: True
+  # Last published value of the running totals below. Those sensors only
+  # publish on events and add onto their previous value, so without a copy
+  # that survives a reboot they come back unknown (and NAN + 1 stays NAN
+  # until the next clean).
+  - id: saved_visits
+    type: int
+    initial_value: "0"
+    restore_value: True
+  - id: saved_waste_weight
+    type: float # g
+    initial_value: "0.0"
+    restore_value: True
+  - id: saved_litter_weight
+    type: float # kg, NAN until first measured
+    initial_value: "NAN"
+    restore_value: True
 
 
   ## Event-related state variables
@@ -183,6 +199,19 @@ esphome:
       # unpublished until the first visit ended. With no event open it is
       # empty by definition, so say so rather than leaving it unknown.
       - lambda: 'id(state_machine_state).publish_state("empty");'
+      # Put back the running totals, and say "no cat" rather than unknown
+      # until the first event (that's what Cat Weight reads between events).
+      - lambda: !lambda |-
+          id(visits).publish_state(id(saved_visits));
+          id(waste_weight).publish_state(id(saved_waste_weight));
+          if (!std::isnan(id(saved_litter_weight))) {
+            id(litter_weight).publish_state(id(saved_litter_weight));
+          }
+          id(current_cat_weight).publish_state(0);
+      # Lambda sensors would otherwise wait out their first 60 s interval.
+      - component.update: litter_level
+      - component.update: deep_clean_due
+      - component.update: calibration_last_performed
 
 esp32:
   board: esp32dev
@@ -236,6 +265,9 @@ time:
   - platform: homeassistant
     timezone: ${timezone}
     id: homeassistant_time
+    # The countdown is NAN until the clock is valid; don't wait a minute more.
+    on_time_sync:
+      - component.update: litter_life_left
     on_time:
       - hours: 0
         minutes: 0
@@ -596,6 +628,8 @@ sensor:
     id: waste_weight
     accuracy_decimals: 0
     icon: "mdi:emoticon-poop"
+    on_value:
+      - lambda: 'if (!std::isnan(x)) id(saved_waste_weight) = x;'
   - platform: template
     name: "Cat Weight"
     id: current_cat_weight
