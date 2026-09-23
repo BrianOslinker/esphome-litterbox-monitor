@@ -117,10 +117,9 @@ globals:
     initial_value: "0"
     restore_value: True
   # Last published value of the running totals below. Those sensors only
-  # publish on events and add onto their previous value, so without a copy
-  # that survives a reboot they come back unknown (and NAN + 1 stays NAN
-  # until the next clean). NAN until first published, so fresh hardware
-  # still reads unknown until the first clean, as before.
+  # publish on events and add onto their previous value, so after a reboot
+  # they are NAN (and NAN + 1 stays NAN until the next clean). See
+  # restore_totals for when they are put back.
   - id: saved_visits
     type: float # count
     initial_value: "NAN"
@@ -197,6 +196,21 @@ globals:
     initial_value: "1.0"
     restore_value: True
 
+  # Last value of the box-tracking diagnostics below. They describe the last
+  # clean, so they shouldn't read unknown after every reboot.
+  - id: saved_litter_added
+    type: float # g
+    initial_value: "NAN"
+    restore_value: True
+  - id: saved_measured_box_weight
+    type: float # g
+    initial_value: "NAN"
+    restore_value: True
+  - id: saved_zero_drift
+    type: float # g
+    initial_value: "NAN"
+    restore_value: True
+
 esphome:
   name: litterbox
   friendly_name: Litterbox
@@ -217,19 +231,7 @@ esphome:
       # unpublished until the first visit ended. With no event open it is
       # empty by definition, so say so rather than leaving it unknown.
       - lambda: 'id(state_machine_state).publish_state("empty");'
-      # Put back the running totals.
-      - lambda: !lambda |-
-          if (!std::isnan(id(saved_visits))) {
-            id(visits).publish_state(id(saved_visits));
-          }
-          if (!std::isnan(id(saved_waste_weight))) {
-            id(waste_weight).publish_state(id(saved_waste_weight));
-          }
-          if (!std::isnan(id(saved_litter_weight))) {
-            id(litter_weight).publish_state(id(saved_litter_weight));
-          }
-      # Its first poll ran before Litter Remaining was restored.
-      - component.update: litter_level
+      - script.execute: restore_totals
 
 esp32:
   board: esp32dev
@@ -238,13 +240,13 @@ esp32:
 
   variant: ESP32
 logger:
-  level: INFO
+  level: DEBUG
 
 api:
   encryption:
     key: !secret litterbox_api_key
-  actions:
-    - action: set_cat_weight
+  services:
+    - service: set_cat_weight
       variables:
         cat: int
         weight: float
@@ -261,10 +263,10 @@ api:
               return;
             }
             id(cat_weights)[cat - 1] = weight;
-    - action: calibration_tare
+    - service: calibration_tare
       then:
         - script.execute: calibrate_tare
-    - action: calibration_weight
+    - service: calibration_weight
       variables:
         known_weight_kg: float
       then:
@@ -282,22 +284,6 @@ api:
                   level: ERROR
                   tag: calibration
                   format: "Ignored: run calibration_tare first, and pass a known weight above 0 kg"
-    # Fix a calibration done with the known weight entered wrong (rounded to
-    # the old 100 g step, say) without redoing it: every reading scales by
-    # actual/entered, so the slope scales by entered/actual.
-    - service: correct_calibration_weight
-      variables:
-        entered_g: float
-        actual_g: float
-      then:
-        - lambda: !lambda |-
-            if (!(entered_g > 0.0f && actual_g > 0.0f) || fabsf(actual_g / entered_g - 1.0f) > 0.1f) {
-              ESP_LOGE("calibration", "Ignored: weights must be positive and within 10%% of each other");
-              return;
-            }
-            id(calibration_coefficient) *= entered_g / actual_g;
-            ESP_LOGI("calibration", "Coefficient rescaled by %.5f (%.0f g entered, %.0f g actual)",
-                     entered_g / actual_g, entered_g, actual_g);
 
 ota:
   - platform: esphome
@@ -572,6 +558,26 @@ sensor:
           d2 = d1;
           d1 = g;
           bm.process(med);
+          if (bm.noise_probe_running() && id(vibration_detected).state) {
+            bm.cancel_noise_probe();
+            id(scale_noise_result).publish_state("Cancelled: the box moved. Press again and leave it untouched");
+          }
+          if (bm.take_noise_probe_result()) {
+            const int need_s = 2 * ${top_up_settle_time};
+            float med_g = bm.noise_probe_median_g();
+            float lim_g = bm.noise_probe_limit_g(need_s);
+            id(scale_noise).publish_state(med_g);
+            id(suggested_still_limit).publish_state(lim_g);
+            char msg[128];
+            if (std::isnan(lim_g)) {
+              snprintf(msg, sizeof msg, "Typical spread %.2f g; never held %d s under 3 g: check wiring and power",
+                       med_g, need_s);
+            } else {
+              snprintf(msg, sizeof msg, "Typical spread %.2f g; suggested top_up_still_sigma %.1f g",
+                       med_g, lim_g);
+            }
+            id(scale_noise_result).publish_state(msg);
+          }
           // Publish once at startup as well as on change: the tracker starts in
           // NORMAL, so a box that is simply sitting there never trips an edge
           // and the sensor would stay unpublished until the first lift. Wait
@@ -684,19 +690,11 @@ sensor:
   - platform: template
     unit_of_measurement: g
     name: "Waste Weight"
+    on_value:
+      - lambda: 'if (!std::isnan(x)) id(saved_waste_weight) = x;'
     id: waste_weight
     accuracy_decimals: 0
     icon: "mdi:emoticon-poop"
-    on_value:
-      - lambda: 'if (!std::isnan(x)) id(saved_waste_weight) = x;'
-  - platform: template
-    name: "Cat Weight"
-    id: current_cat_weight
-    entity_category: diagnostic
-    accuracy_decimals: 2
-    unit_of_measurement: kg
-    icon: "mdi:scale-bathroom"
-    disabled_by_default: True
   - platform: template
     unit_of_measurement: kg
     # A few grams under zero is two readings of an empty box disagreeing,
@@ -728,37 +726,46 @@ sensor:
   # Litter poured in the last top-up or deep clean.
   - platform: template
     id: litter_added
+    lambda: return id(saved_litter_added);
+    on_value:
+      - lambda: 'if (!std::isnan(x)) id(saved_litter_added) = x;'
     name: "Litter Added"
     icon: "mdi:tray-arrow-down"
     unit_of_measurement: "g"
     state_class: measurement
     accuracy_decimals: 0
-    update_interval: never
+    update_interval: 60s
     disabled_by_default: True
   # What the empty box weighed when it last came back washed. Compare with
   # the Empty Box Weight setting.
   - platform: template
     id: measured_box_weight
+    lambda: return id(saved_measured_box_weight);
+    on_value:
+      - lambda: 'if (!std::isnan(x)) id(saved_measured_box_weight) = x;'
     name: "Measured Box Weight"
     icon: "mdi:scale"
     entity_category: diagnostic
     unit_of_measurement: "g"
     state_class: measurement
     accuracy_decimals: 0
-    update_interval: never
+    update_interval: 60s
     disabled_by_default: True
   # What the bare board read the last time the box was off it, before the
   # zero was corrected. Grows with temperature and cell creep; a jump means
   # something is wedged under the board.
   - platform: template
     id: zero_drift
+    lambda: return id(saved_zero_drift);
+    on_value:
+      - lambda: 'if (!std::isnan(x)) id(saved_zero_drift) = x;'
     name: "Zero Drift"
     icon: "mdi:scale-off"
     entity_category: diagnostic
     unit_of_measurement: "g"
     state_class: measurement
     accuracy_decimals: 0
-    update_interval: never
+    update_interval: 60s
     disabled_by_default: True
   # Longest stretch of the last event that held still (1 s σ) under 1, 1.5
   # and 2 g, for choosing top_up_still_sigma from your own cats' visits.
@@ -787,6 +794,24 @@ sensor:
     entity_category: diagnostic
     unit_of_measurement: "s"
     state_class: measurement
+    accuracy_decimals: 1
+    update_interval: never
+  # From the last Measure Scale Noise run: the typical 1 s spread, and the
+  # smallest limit the untouched box held for twice top_up_settle_time.
+  - platform: template
+    id: scale_noise
+    name: "Scale Noise"
+    icon: "mdi:waveform"
+    entity_category: diagnostic
+    unit_of_measurement: "g"
+    accuracy_decimals: 2
+    update_interval: never
+  - platform: template
+    id: suggested_still_limit
+    name: "Suggested Still Limit"
+    icon: "mdi:waveform"
+    entity_category: diagnostic
+    unit_of_measurement: "g"
     accuracy_decimals: 1
     update_interval: never
   - platform: template
@@ -888,6 +913,13 @@ text_sensor:
     id: state_machine_state
     name: "State Machine"
     icon: "mdi:state-machine"
+    entity_category: diagnostic
+    update_interval: never
+  # Outcome of the last Measure Scale Noise run.
+  - platform: template
+    id: scale_noise_result
+    name: "Scale Noise Result"
+    icon: "mdi:waveform"
     entity_category: diagnostic
     update_interval: never
   # normal / lifted (monitor in the air) / off (bare board) / empty (washed
@@ -1111,6 +1143,16 @@ button:
           id(waste_weight).publish_state(0);
           id(visits).publish_state(0);
           id(litter_weight).publish_state(id(hx711_raw_value).state - (id(litterbox_weight).state/1000.0));
+  # Leave the box untouched for 2 minutes: measures how still this board
+  # reads and suggests top_up_still_sigma (see Scale Noise Result).
+  - platform: template
+    name: "Measure Scale Noise"
+    icon: "mdi:waveform"
+    entity_category: config
+    on_press:
+      - lambda: !lambda |-
+          get_box_monitor().start_noise_probe(120 * 10);
+          id(scale_noise_result).publish_state("Measuring: leave the box untouched for 2 min");
   - platform: template
     name: "Calibrate Scale"
     icon: mdi:scale-bathroom
@@ -1127,6 +1169,42 @@ button:
                 known_weight_kg: !lambda return id(calibration_known_weight).state / 1000.0;
 
 script:
+  # After a reboot, put the running totals back only if nothing happened to
+  # the box while the monitor was off, judged like a box taken off and put
+  # back: within min_clean_event_weight..lift_return_tolerance of the last
+  # tare, nothing changed. Lighter than that was a scoop, so the totals
+  # restart. Heavier was a visit or a top-up it didn't see, so they stay
+  # unknown until the next clean, as before.
+  - id: restore_totals
+    then:
+      - wait_until:
+          condition:
+            lambda: 'return get_box_monitor().ready() && !id(vibration_detected).state && !std::isnan(id(hx711_raw_value).state);'
+          timeout: 60s
+      - lambda: !lambda |-
+          float raw_kg = id(hx711_raw_value).state;
+          if (!get_box_monitor().ready() || id(vibration_detected).state || std::isnan(raw_kg)) {
+            ESP_LOGW("totals", "No steady reading after boot; totals stay unknown");
+            return;
+          }
+          float delta_g = (raw_kg - id(tare_value) - id(auto_tare_value)) * 1000.0f;
+          if (delta_g >= ${min_clean_event_weight} && delta_g <= ${lift_return_tolerance}) {
+            ESP_LOGI("totals", "Box unchanged while off (%+.0f g): totals restored", delta_g);
+            if (!std::isnan(id(saved_visits))) id(visits).publish_state(id(saved_visits));
+            if (!std::isnan(id(saved_waste_weight))) id(waste_weight).publish_state(id(saved_waste_weight));
+            if (!std::isnan(id(saved_litter_weight))) id(litter_weight).publish_state(id(saved_litter_weight));
+          } else if (delta_g < ${min_clean_event_weight}) {
+            ESP_LOGI("totals", "Box %.0f g lighter than before it went off: scooped", -delta_g);
+            id(visits).publish_state(0);
+            id(waste_weight).publish_state(0);
+            id(litter_weight).publish_state(raw_kg - id(litterbox_weight).state / 1000.0f);
+            id(tare_value) = raw_kg;
+            id(auto_tare_value) = 0;
+          } else {
+            ESP_LOGI("totals", "Box %.0f g heavier than before it went off: totals unknown until the next clean", delta_g);
+          }
+      - component.update: litter_level
+
   # Zero the daily counters once the date has moved on. Runs at midnight and
   # on every clock sync, so a midnight spent powered off still gets its reset.
   - id: roll_daily_counters
@@ -1245,7 +1323,6 @@ script:
             const StateResult &result = *visit;
             id(elimination_type_sensor).publish_state(
                 elimination_type_str(result.elimination_type));
-            id(current_cat_weight).publish_state(result.cat_weight / 1000.0f);
             id(event_duration_sensor).publish_state(duration);
 
             // Publish std dev of the single elimination period

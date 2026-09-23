@@ -196,8 +196,6 @@ That's it — the monitor is ready to use.
   `lifted` (the whole monitor was picked up and put back) once the counters
   have been updated. Use it as an automation trigger.
   [How it works ->](docs/BOX_TRACKING.md)
-- **Cat Weight:** Diagnostic sensor (disabled by default) showing the cat weight
-  in kg from the last PoopSense result.
 - **Elimination Std Dev:** Diagnostic; the standard deviation (grams) of the
   elimination window PoopSense classified last. Compare it with the
   Classification Threshold when tuning.
@@ -217,6 +215,8 @@ That's it — the monitor is ready to use.
 - **Still Stretch 1 g / 1.5 g / 2 g:** Diagnostic; the longest stretch of the
   last event that held still under each limit, in seconds. For tuning
   `top_up_still_sigma` (see [Box Tracking](docs/BOX_TRACKING.md)).
+- **Scale Noise / Suggested Still Limit / Scale Noise Result:** Diagnostic;
+  the outcome of the last `Measure Scale Noise` run.
 - **Raw/Unfiltered/Tared Weight:** Diagnostic weight readings.
 - **Analog sensor value:** Diagnostic (disabled by default); the raw HX711
   count before calibration is applied.
@@ -253,10 +253,6 @@ That's it — the monitor is ready to use.
 - `set_cat_weight`: Set a cat's weight manually via Home Assistant or API.
   - Parameters: `cat` (int, 1-5), `weight` (float, kg, 0-20; 0 clears the slot)
   - Example: To set Cat 1's weight to 5.2kg, call `set_cat_weight` with `cat=1`, `weight=5.2`.
-- `correct_calibration_weight`: Fix a calibration that was done with the wrong
-  known weight entered, without redoing it.
-  - Parameters: `entered_g` (float, what Calibration Known Weight said),
-    `actual_g` (float, what the weights really weighed)
 
 ### Synchronize Multiple Litterboxes
 
