@@ -173,6 +173,21 @@ globals:
     initial_value: "1.0"
     restore_value: True
 
+  # Last value of the box-tracking diagnostics below. They describe the last
+  # clean, so they shouldn't read unknown after every reboot.
+  - id: saved_litter_added
+    type: float # g
+    initial_value: "NAN"
+    restore_value: True
+  - id: saved_measured_box_weight
+    type: float # g
+    initial_value: "NAN"
+    restore_value: True
+  - id: saved_zero_drift
+    type: float # g
+    initial_value: "NAN"
+    restore_value: True
+
 esphome:
   name: litterbox
   friendly_name: Litterbox
@@ -651,37 +666,46 @@ sensor:
   # Litter poured in the last top-up or deep clean.
   - platform: template
     id: litter_added
+    lambda: return id(saved_litter_added);
+    on_value:
+      - lambda: 'if (!std::isnan(x)) id(saved_litter_added) = x;'
     name: "Litter Added"
     icon: "mdi:tray-arrow-down"
     unit_of_measurement: "g"
     state_class: measurement
     accuracy_decimals: 0
-    update_interval: never
+    update_interval: 60s
     disabled_by_default: True
   # What the empty box weighed when it last came back washed. Compare with
   # the Empty Box Weight setting.
   - platform: template
     id: measured_box_weight
+    lambda: return id(saved_measured_box_weight);
+    on_value:
+      - lambda: 'if (!std::isnan(x)) id(saved_measured_box_weight) = x;'
     name: "Measured Box Weight"
     icon: "mdi:scale"
     entity_category: diagnostic
     unit_of_measurement: "g"
     state_class: measurement
     accuracy_decimals: 0
-    update_interval: never
+    update_interval: 60s
     disabled_by_default: True
   # What the bare board read the last time the box was off it, before the
   # zero was corrected. Grows with temperature and cell creep; a jump means
   # something is wedged under the board.
   - platform: template
     id: zero_drift
+    lambda: return id(saved_zero_drift);
+    on_value:
+      - lambda: 'if (!std::isnan(x)) id(saved_zero_drift) = x;'
     name: "Zero Drift"
     icon: "mdi:scale-off"
     entity_category: diagnostic
     unit_of_measurement: "g"
     state_class: measurement
     accuracy_decimals: 0
-    update_interval: never
+    update_interval: 60s
     disabled_by_default: True
   - platform: template
     name: "Visits since clean"
