@@ -805,6 +805,11 @@ sensor:
       - median:
           window_size: 4
           send_every: 4
+  # Time since the last boot: shows whether it restarted on its own.
+  - platform: uptime
+    id: uptime_sensor
+    name: "Uptime"
+    disabled_by_default: True
 
 text_sensor:
   - platform: template
@@ -970,6 +975,9 @@ binary_sensor:
           seconds: 2
 
 button:
+  - platform: restart
+    name: "Restart"
+    disabled_by_default: True
   - platform: template
     name: "Reset Deep Clean Timer"
     icon: mdi:reload
