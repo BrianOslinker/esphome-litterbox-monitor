@@ -315,7 +315,7 @@ sensor:
     accuracy_decimals: 2
     unit_of_measurement: kg
     # 0 is the "not set" marker everywhere else; unknown until set_cat_weight
-    # (or a learned visit) gives this cat a weight.
+    # gives this cat a weight (visits only refine a weight that's already set).
     lambda: !lambda 'return id(cat_weights)[0] > 0.0f ? id(cat_weights)[0] : NAN;'
     internal: False
     update_interval: 1s
