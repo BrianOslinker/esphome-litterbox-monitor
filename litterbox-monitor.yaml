@@ -70,10 +70,17 @@ substitutions:
   # Smallest rise reported as a litter top-up.
   min_top_up_weight: "300" # g
 
-  # Mass that sits this long without a wobble (1 s σ < 1 g) is litter, not a
-  # cat, whatever it weighs: the stillest cat on record managed 11 s. Ends a
-  # top-up early and is what a rise must do to count as one.
+  # Mass that sits this long without a wobble (1 s σ under
+  # top_up_still_sigma) is litter, not a cat, whatever it weighs: the stillest
+  # cat on record managed 11 s. Ends a top-up early and is what a rise must do
+  # to count as one.
   top_up_settle_time: "30" # seconds
+
+  # The wobble limit for the above. 1 g suits a quiet board; a noisier one
+  # never holds it for top_up_settle_time and top-ups go unrecognised. The
+  # Still Stretch sensors show how long your cats hold still under 1, 1.5 and
+  # 2 g: pick a limit they stay well short of top_up_settle_time at.
+  top_up_still_sigma: "1.0" # g
 
 globals:
   ## General state
@@ -525,7 +532,36 @@ sensor:
           BoxMonitor &bm = get_box_monitor();
           static BoxState prev_box = BoxState::NORMAL;
           static bool box_published = false;
-          bm.process(x * 1000.0f);
+          // Median of the last three readings: one glitched sample would
+          // otherwise reset the stillness count, for 100 ms of delay.
+          static float d1 = NAN, d2 = NAN;
+          float g = x * 1000.0f;
+          float med = g;
+          if (!std::isnan(d1) && !std::isnan(d2))
+            med = std::max(std::min(g, d1), std::min(std::max(g, d1), d2));
+          d2 = d1;
+          d1 = g;
+          bm.process(med);
+          if (bm.noise_probe_running() && id(vibration_detected).state) {
+            bm.cancel_noise_probe();
+            id(scale_noise_result).publish_state("Cancelled: the box moved. Press again and leave it untouched");
+          }
+          if (bm.take_noise_probe_result()) {
+            const int need_s = 2 * ${top_up_settle_time};
+            float med_g = bm.noise_probe_median_g();
+            float lim_g = bm.noise_probe_limit_g(need_s);
+            id(scale_noise).publish_state(med_g);
+            id(suggested_still_limit).publish_state(lim_g);
+            char msg[128];
+            if (std::isnan(lim_g)) {
+              snprintf(msg, sizeof msg, "Typical spread %.2f g; never held %d s under 3 g: check wiring and power",
+                       med_g, need_s);
+            } else {
+              snprintf(msg, sizeof msg, "Typical spread %.2f g; suggested top_up_still_sigma %.1f g",
+                       med_g, lim_g);
+            }
+            id(scale_noise_result).publish_state(msg);
+          }
           // Publish once at startup as well as on change: the tracker starts in
           // NORMAL, so a box that is simply sitting there never trips an edge
           // and the sensor would stay unpublished until the first lift. Wait
@@ -706,6 +742,53 @@ sensor:
     accuracy_decimals: 0
     update_interval: never
     disabled_by_default: True
+  # Longest stretch of the last event that held still (1 s σ) under 1, 1.5
+  # and 2 g, for choosing top_up_still_sigma from your own cats' visits.
+  - platform: template
+    id: still_stretch_1g
+    name: "Still Stretch 1 g"
+    icon: "mdi:timer-sand"
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: never
+  - platform: template
+    id: still_stretch_1_5g
+    name: "Still Stretch 1.5 g"
+    icon: "mdi:timer-sand"
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: never
+  - platform: template
+    id: still_stretch_2g
+    name: "Still Stretch 2 g"
+    icon: "mdi:timer-sand"
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: never
+  # From the last Measure Scale Noise run: the typical 1 s spread, and the
+  # smallest limit the untouched box held for twice top_up_settle_time.
+  - platform: template
+    id: scale_noise
+    name: "Scale Noise"
+    icon: "mdi:waveform"
+    entity_category: diagnostic
+    unit_of_measurement: "g"
+    accuracy_decimals: 2
+    update_interval: never
+  - platform: template
+    id: suggested_still_limit
+    name: "Suggested Still Limit"
+    icon: "mdi:waveform"
+    entity_category: diagnostic
+    unit_of_measurement: "g"
+    accuracy_decimals: 1
+    update_interval: never
   - platform: template
     name: "Visits since clean"
     id: visits
@@ -805,6 +888,13 @@ text_sensor:
     id: state_machine_state
     name: "State Machine"
     icon: "mdi:state-machine"
+    entity_category: diagnostic
+    update_interval: never
+  # Outcome of the last Measure Scale Noise run.
+  - platform: template
+    id: scale_noise_result
+    name: "Scale Noise Result"
+    icon: "mdi:waveform"
     entity_category: diagnostic
     update_interval: never
   # normal / lifted (monitor in the air) / off (bare board) / empty (washed
@@ -1028,6 +1118,16 @@ button:
           id(waste_weight).publish_state(0);
           id(visits).publish_state(0);
           id(litter_weight).publish_state(id(hx711_raw_value).state - (id(litterbox_weight).state/1000.0));
+  # Leave the box untouched for 2 minutes: measures how still this board
+  # reads and suggests top_up_still_sigma (see Scale Noise Result).
+  - platform: template
+    name: "Measure Scale Noise"
+    icon: "mdi:waveform"
+    entity_category: config
+    on_press:
+      - lambda: !lambda |-
+          get_box_monitor().start_noise_probe(120 * 10);
+          id(scale_noise_result).publish_state("Measuring: leave the box untouched for 2 min");
   - platform: template
     name: "Calibrate Scale"
     icon: mdi:scale-bathroom
@@ -1115,6 +1215,7 @@ script:
           cfg.scoop_min_g = -(${min_clean_event_weight});
           cfg.scoop_min_s = ${min_clean_event_duration};
           cfg.settle_s = ${top_up_settle_time};
+          cfg.inert_sigma_g = ${top_up_still_sigma};
           get_box_monitor().configure(cfg);
 
   # Start recording: activity just began, or the previous event closed while
@@ -1186,6 +1287,9 @@ script:
                    box_event_str(box.kind), box.level_g, box.litter_added_g,
                    box.box_measured_g, zero_g, box.zero_valid ? "" : " (unchecked)",
                    (int) box.absent);
+          id(still_stretch_1g).publish_state(box.longest_still_s[0]);
+          id(still_stretch_1_5g).publish_state(box.longest_still_s[1]);
+          id(still_stretch_2g).publish_state(box.longest_still_s[2]);
 
           // Maintenance outranks the visit analysis: a bag that happens to
           // weigh what a cat does matches the cat by weight, but it went
