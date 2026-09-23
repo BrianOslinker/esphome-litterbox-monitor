@@ -106,17 +106,18 @@ globals:
   # Last published value of the running totals below. Those sensors only
   # publish on events and add onto their previous value, so without a copy
   # that survives a reboot they come back unknown (and NAN + 1 stays NAN
-  # until the next clean).
+  # until the next clean). NAN until first published, so fresh hardware
+  # still reads unknown until the first clean, as before.
   - id: saved_visits
-    type: int
-    initial_value: "0"
+    type: float # count
+    initial_value: "NAN"
     restore_value: True
   - id: saved_waste_weight
     type: float # g
-    initial_value: "0.0"
+    initial_value: "NAN"
     restore_value: True
   - id: saved_litter_weight
-    type: float # kg, NAN until first measured
+    type: float # kg
     initial_value: "NAN"
     restore_value: True
 
@@ -202,8 +203,12 @@ esphome:
       # Put back the running totals, and say "no cat" rather than unknown
       # until the first event (that's what Cat Weight reads between events).
       - lambda: !lambda |-
-          id(visits).publish_state(id(saved_visits));
-          id(waste_weight).publish_state(id(saved_waste_weight));
+          if (!std::isnan(id(saved_visits))) {
+            id(visits).publish_state(id(saved_visits));
+          }
+          if (!std::isnan(id(saved_waste_weight))) {
+            id(waste_weight).publish_state(id(saved_waste_weight));
+          }
           if (!std::isnan(id(saved_litter_weight))) {
             id(litter_weight).publish_state(id(saved_litter_weight));
           }
