@@ -98,6 +98,12 @@ globals:
     type: int[5] # count
     initial_value: "{0, 0, 0, 0, 0}"
     restore_value: True
+  # Day the daily counters belong to (year * 1000 + day of year). The
+  # counters survive reboots, so the reset has to as well.
+  - id: daily_counters_day
+    type: int
+    initial_value: "0"
+    restore_value: True
   # Timestamp of last litter change
   - id: litter_changed_date
     type: time_t
@@ -119,12 +125,6 @@ globals:
   - id: saved_litter_weight
     type: float # kg
     initial_value: "NAN"
-    restore_value: True
-  # Day the daily counters belong to (year * 1000 + day of year). The
-  # counters survive reboots, so the reset has to as well.
-  - id: daily_counters_day
-    type: int
-    initial_value: "0"
     restore_value: True
 
 
@@ -259,7 +259,7 @@ api:
         known_weight_kg: float
       then:
         # The button path can't get here without a tare, and its weight
-        # can't be 0; an action call can do both and wreck the calibration.
+        # can't be 0; a service call can do both and wreck the calibration.
         - if:
             condition:
               lambda: 'return id(calibration_tare_temp) != 0.0f && known_weight_kg > 0.0f;'
@@ -290,8 +290,8 @@ time:
   - platform: homeassistant
     timezone: ${timezone}
     id: homeassistant_time
-    # The countdown is NAN until the clock is valid; don't wait a minute more.
     on_time_sync:
+      # The countdown is NAN until the clock is valid; don't wait a minute more.
       - component.update: litter_life_left
       # Catch up on a midnight missed while powered off or without a clock.
       - script.execute: roll_daily_counters
@@ -857,8 +857,8 @@ number:
     id: calibration_known_weight
     icon: mdi:weight-kilogram
     min_value: 1000
-    # Up to the 40 kg the weight filter accepts; gram steps so an odd
-    # reference (a bag of litter, a filled bottle) can be entered exactly.
+    # Up to the 40 kg the weight filter accepts; gram steps so the weights
+    # can be entered exactly as measured.
     max_value: 40000
     step: 1
     mode: box
