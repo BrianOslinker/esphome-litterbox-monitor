@@ -212,6 +212,8 @@ That's it — the monitor is ready to use.
 - **Still Stretch 1 g / 1.5 g / 2 g:** Diagnostic; the longest stretch of the
   last event that held still under each limit, in seconds. For tuning
   `top_up_still_sigma` (see [Box Tracking](docs/BOX_TRACKING.md)).
+- **Scale Noise / Suggested Still Limit / Scale Noise Result:** Diagnostic;
+  the outcome of the last `Measure Scale Noise` run.
 - **Raw/Unfiltered/Tared Weight:** Diagnostic weight readings.
 - **Analog sensor value:** Diagnostic (disabled by default); the raw HX711
   count before calibration is applied.

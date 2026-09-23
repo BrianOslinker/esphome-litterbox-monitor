@@ -520,6 +520,26 @@ sensor:
           d2 = d1;
           d1 = g;
           bm.process(med);
+          if (bm.noise_probe_running() && id(vibration_detected).state) {
+            bm.cancel_noise_probe();
+            id(scale_noise_result).publish_state("Cancelled: the box moved. Press again and leave it untouched");
+          }
+          if (bm.take_noise_probe_result()) {
+            const int need_s = 2 * ${top_up_settle_time};
+            float med_g = bm.noise_probe_median_g();
+            float lim_g = bm.noise_probe_limit_g(need_s);
+            id(scale_noise).publish_state(med_g);
+            id(suggested_still_limit).publish_state(lim_g);
+            char msg[128];
+            if (std::isnan(lim_g)) {
+              snprintf(msg, sizeof msg, "Typical spread %.2f g; never held %d s under 3 g: check wiring and power",
+                       med_g, need_s);
+            } else {
+              snprintf(msg, sizeof msg, "Typical spread %.2f g; suggested top_up_still_sigma %.1f g",
+                       med_g, lim_g);
+            }
+            id(scale_noise_result).publish_state(msg);
+          }
           // Publish once at startup as well as on change: the tracker starts in
           // NORMAL, so a box that is simply sitting there never trips an edge
           // and the sensor would stay unpublished until the first lift. Wait
@@ -728,6 +748,24 @@ sensor:
     state_class: measurement
     accuracy_decimals: 1
     update_interval: never
+  # From the last Measure Scale Noise run: the typical 1 s spread, and the
+  # smallest limit the untouched box held for twice top_up_settle_time.
+  - platform: template
+    id: scale_noise
+    name: "Scale Noise"
+    icon: "mdi:waveform"
+    entity_category: diagnostic
+    unit_of_measurement: "g"
+    accuracy_decimals: 2
+    update_interval: never
+  - platform: template
+    id: suggested_still_limit
+    name: "Suggested Still Limit"
+    icon: "mdi:waveform"
+    entity_category: diagnostic
+    unit_of_measurement: "g"
+    accuracy_decimals: 1
+    update_interval: never
   - platform: template
     name: "Visits since clean"
     id: visits
@@ -819,6 +857,13 @@ text_sensor:
     id: state_machine_state
     name: "State Machine"
     icon: "mdi:state-machine"
+    entity_category: diagnostic
+    update_interval: never
+  # Outcome of the last Measure Scale Noise run.
+  - platform: template
+    id: scale_noise_result
+    name: "Scale Noise Result"
+    icon: "mdi:waveform"
     entity_category: diagnostic
     update_interval: never
   # normal / lifted (monitor in the air) / off (bare board) / empty (washed
@@ -989,6 +1034,16 @@ button:
           id(waste_weight).publish_state(0);
           id(visits).publish_state(0);
           id(litter_weight).publish_state(id(hx711_raw_value).state - (id(litterbox_weight).state/1000.0));
+  # Leave the box untouched for 2 minutes: measures how still this board
+  # reads and suggests top_up_still_sigma (see Scale Noise Result).
+  - platform: template
+    name: "Measure Scale Noise"
+    icon: "mdi:waveform"
+    entity_category: config
+    on_press:
+      - lambda: !lambda |-
+          get_box_monitor().start_noise_probe(120 * 10);
+          id(scale_noise_result).publish_state("Measuring: leave the box untouched for 2 min");
   - platform: template
     name: "Calibrate Scale"
     icon: mdi:scale-bathroom
