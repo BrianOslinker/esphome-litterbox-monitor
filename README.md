@@ -96,8 +96,8 @@ YAML to match your wiring.
    files are required).
 
 2. Create a `secrets.yaml` next to them defining:
-   `wifi_ssid`, `wifi_password`, `litterbox_api_key`, `litterbox_ota_password`,
-   and `litterbox_ap_password`.
+   `wifi_ssid`, `wifi_password`, `litterbox_api_key` and `litterbox_ap_password`.
+   (Updates are encrypted with the API key, so no separate OTA password is needed.)
 
 3. Edit the `substitutions` block at the top of the YAML:
 

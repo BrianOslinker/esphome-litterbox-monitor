@@ -244,7 +244,7 @@ api:
 
 ota:
   - platform: esphome
-    password: !secret litterbox_ota_password
+    encryption:
 
 wifi:
   ssid: !secret wifi_ssid
