@@ -25,6 +25,14 @@ The stillest cat in the recorded visits managed 11 s. Poured litter holds it
 forever. So a rise that stays inert for 30 s is litter, even if the bag
 happens to weigh exactly what your cat does.
 
+That 1 g is `top_up_still_sigma`, and it suits a quiet board. On a noisier
+one the reading never holds it for 30 s, and top-ups go unrecognised (they
+end on the inactivity timeout and count as a visit instead). The "Still
+Stretch" diagnostics record the longest stretch of every event under 1, 1.5
+and 2 g: look at them after a few days of visits and raise the limit to one
+your cats stay well short of 30 s at. The readings go through a median of
+three before this test, so a single glitched sample doesn't reset it.
+
 `BoxMonitor` in [state_analyzer.h](../state_analyzer.h) sees every sample,
 not just during events, because the interesting moments straddle event
 boundaries (box leaves in one event, comes back in the next). It tracks two

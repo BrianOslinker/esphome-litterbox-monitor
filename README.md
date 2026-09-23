@@ -214,6 +214,9 @@ That's it — the monitor is ready to use.
   came back from a deep clean, to compare with the Empty Box Weight setting.
 - **Zero Drift:** Diagnostic; what the bare board read the last time the box
   was off, before the zero was corrected.
+- **Still Stretch 1 g / 1.5 g / 2 g:** Diagnostic; the longest stretch of the
+  last event that held still under each limit, in seconds. For tuning
+  `top_up_still_sigma` (see [Box Tracking](docs/BOX_TRACKING.md)).
 - **Raw/Unfiltered/Tared Weight:** Diagnostic weight readings.
 - **Analog sensor value:** Diagnostic (disabled by default); the raw HX711
   count before calibration is applied.
