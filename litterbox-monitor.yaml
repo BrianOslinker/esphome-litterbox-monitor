@@ -103,6 +103,23 @@ globals:
     type: time_t
     initial_value: "0"
     restore_value: True
+  # Last published value of the running totals below. Those sensors only
+  # publish on events and add onto their previous value, so without a copy
+  # that survives a reboot they come back unknown (and NAN + 1 stays NAN
+  # until the next clean). NAN until first published, so fresh hardware
+  # still reads unknown until the first clean, as before.
+  - id: saved_visits
+    type: float # count
+    initial_value: "NAN"
+    restore_value: True
+  - id: saved_waste_weight
+    type: float # g
+    initial_value: "NAN"
+    restore_value: True
+  - id: saved_litter_weight
+    type: float # kg
+    initial_value: "NAN"
+    restore_value: True
 
 
   ## Event-related state variables
@@ -183,6 +200,19 @@ esphome:
       # unpublished until the first visit ended. With no event open it is
       # empty by definition, so say so rather than leaving it unknown.
       - lambda: 'id(state_machine_state).publish_state("empty");'
+      # Put back the running totals.
+      - lambda: !lambda |-
+          if (!std::isnan(id(saved_visits))) {
+            id(visits).publish_state(id(saved_visits));
+          }
+          if (!std::isnan(id(saved_waste_weight))) {
+            id(waste_weight).publish_state(id(saved_waste_weight));
+          }
+          if (!std::isnan(id(saved_litter_weight))) {
+            id(litter_weight).publish_state(id(saved_litter_weight));
+          }
+      # Its first poll ran before Litter Remaining was restored.
+      - component.update: litter_level
 
 esp32:
   board: esp32dev
@@ -595,6 +625,8 @@ sensor:
     id: waste_weight
     accuracy_decimals: 0
     icon: "mdi:emoticon-poop"
+    on_value:
+      - lambda: 'if (!std::isnan(x)) id(saved_waste_weight) = x;'
   - platform: template
     name: "Cat Weight"
     id: current_cat_weight
@@ -609,6 +641,8 @@ sensor:
     name: "Litter Remaining"
     icon: "mdi:tray-full"
     accuracy_decimals: 2
+    on_value:
+      - lambda: 'if (!std::isnan(x)) id(saved_litter_weight) = x;'
   # Litter remaining as a share of a full box.
   - platform: template
     id: litter_level
@@ -665,6 +699,8 @@ sensor:
     accuracy_decimals: 0
     update_interval: never
     state_class: measurement
+    on_value:
+      - lambda: 'if (!std::isnan(x)) id(saved_visits) = x;'
   # NAN until the first reset ("0 days" would claim a deadline nobody set),
   # fractional so the last day still counts down, negative once overdue —
   # clamping at 0 made "expired yesterday" and "expired last month" read
@@ -787,6 +823,7 @@ number:
     unit_of_measurement: "d"
     optimistic: true
     initial_value: "30"
+    restore_value: True
     entity_category: config
   - platform: template
     name: "Calibration Known Weight"
