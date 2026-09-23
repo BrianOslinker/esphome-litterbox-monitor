@@ -245,8 +245,10 @@ logger:
 api:
   encryption:
     key: !secret litterbox_api_key
-  services:
-    - service: set_cat_weight
+  # Local choice: 'actions' is ESPHome's current name. Upstream still says
+  # 'services'; ESPHome accepts both, so this difference is deliberate.
+  actions:
+    - action: set_cat_weight
       variables:
         cat: int
         weight: float
@@ -263,10 +265,10 @@ api:
               return;
             }
             id(cat_weights)[cat - 1] = weight;
-    - service: calibration_tare
+    - action: calibration_tare
       then:
         - script.execute: calibrate_tare
-    - service: calibration_weight
+    - action: calibration_weight
       variables:
         known_weight_kg: float
       then:
