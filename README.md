@@ -168,7 +168,8 @@ That's it — the monitor is ready to use.
 ### Sensors and Entities
 
 - **Cat 1-5 Weight:** Last weight stored for each cat when PoopSense identifies
-  them on a visit (only enabled cats are visible).
+  them on a visit (only enabled cats are visible). Unknown until set with
+  `set_cat_weight`.
 - **Cat 1-5 Daily Visits:** Number of visits per day for each cat (only enabled cats are visible).
 - **Cat 1-5 Daily Pee:** Number of urination events today for each cat (only enabled cats are visible).
 - **Cat 1-5 Daily Poops:** Number of defecation events today for each cat (only enabled cats are visible).
@@ -219,7 +220,7 @@ That's it — the monitor is ready to use.
 
 - **Litter Change Interval:** Configure the number of days between deep clean reminders (7-30 days, default: 30).
 - **Classification Threshold:** Standard deviation threshold (in grams) that separates urination from defecation. The default of 4 g works well out of the box; raise it if defecation events are being over-reported, lower it if they're being missed.  See [PoopSense](docs/POOPSENSE.md) for details.
-- **Calibration Known Weight:** Weight of calibration objects used during scale setup.
+- **Calibration Known Weight:** Weight of calibration objects used during scale setup, in grams (1 g steps, up to 40 kg). Kept across reboots.
 - **Empty Box Weight:** Weight of the empty litterbox for improved litter remaining calculations. Also what deep-clean detection compares against; left at 0, deep cleans are not detected.
 - **Full Litter Weight:** How much litter (in kg) a freshly filled box holds — what the "Litter Level" percentage counts as 100%. Left at 0, that sensor stays unavailable.
 
@@ -236,7 +237,7 @@ That's it — the monitor is ready to use.
 ### Actions (Services)
 
 - `set_cat_weight`: Set a cat's weight manually via Home Assistant or API.
-  - Parameters: `cat` (int, 1-5), `weight` (float)
+  - Parameters: `cat` (int, 1-5), `weight` (float, kg, 0-20; 0 clears the slot)
   - Example: To set Cat 1's weight to 5.2kg, call `set_cat_weight` with `cat=1`, `weight=5.2`.
 
 ### Synchronize Multiple Litterboxes
