@@ -137,7 +137,8 @@ YAML to match your wiring.
 
    The "Raw weight" sensor should now read the weight you placed on it,
    and the "Calibration Last Performed" sensor should read the current time.
-   If this is not the case, consult the ESPHome logs for errors and repeat
+   If this is not the case, check the "Calibration Status" sensor (or the
+   ESPHome logs) for errors and repeat
    steps 2-5.
 
 6. ***Optional*** Fill in "Empty Box Weight" number entity to the weight of the
@@ -187,6 +188,8 @@ That's it — the monitor is ready to use.
   on both ends and shows up before the clock has synced.
 - **Calibration Last Performed:** Timestamp of the last completed scale
   calibration. Unavailable until one has been run.
+- **Calibration Status:** Diagnostic; what the next `Calibrate Scale` press will do (tare
+  or set the known weight), or why the last step failed.
 - **Litter Added:** Grams poured in at the last top-up or deep clean.
 - **Maintenance:** Event entity that fires `scoop`, `top_up`, `deep_clean` or
   `lifted` (the whole monitor was picked up and put back) once the counters
@@ -231,8 +234,9 @@ That's it — the monitor is ready to use.
 
   Only required if the automatic clean detection failed.
 - **Calibrate Scale:** Runs the two-step calibration: first press tares the
-  bare board, second press (with the known weight on) sets the span. See
-  [Calibration](#calibration).
+  bare board, second press (with the known weight on) sets the span.
+  "Calibration Status" shows which one the next press runs; an unfinished tare
+  expires after 15 minutes. See [Calibration](#calibration).
 
 ### Actions (Services)
 
