@@ -1142,6 +1142,17 @@ script:
               break;
           }
 
+          // A refill past what counts as full means "full" was set low: raise
+          // it rather than report more than 100%. Never lowered here.
+          float full_kg = id(litter_full_weight).state;
+          if ((box.kind == BoxEventKind::TOP_UP || box.kind == BoxEventKind::DEEP_CLEAN) &&
+              full_kg > 0.0f && id(litter_weight).state > full_kg) {
+            auto call = id(litter_full_weight).make_call();
+            call.set_value(ceilf(id(litter_weight).state * 10.0f) / 10.0f);  // the entity's 0.1 kg step
+            call.perform();
+            ESP_LOGI("litter", "Full Litter Weight raised to %.1f kg", ceilf(id(litter_weight).state * 10.0f) / 10.0f);
+          }
+
           // A visit ends with whatever the cat left behind on the scale.
           // Unless the cat is the thing still on the scale: the inactivity
           // timeout fires when a cat sits dead still, and taring then would
