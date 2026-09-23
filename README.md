@@ -168,7 +168,8 @@ That's it — the monitor is ready to use.
 ### Sensors and Entities
 
 - **Cat 1-5 Weight:** Last weight stored for each cat when PoopSense identifies
-  them on a visit (only enabled cats are visible).
+  them on a visit (only enabled cats are visible). Unknown until set with
+  `set_cat_weight`.
 - **Cat 1-5 Daily Visits:** Number of visits per day for each cat (only enabled cats are visible).
 - **Cat 1-5 Daily Pee:** Number of urination events today for each cat (only enabled cats are visible).
 - **Cat 1-5 Daily Poops:** Number of defecation events today for each cat (only enabled cats are visible).
