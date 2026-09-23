@@ -184,7 +184,7 @@ That's it — the monitor is ready to use.
 - **Deep Clean Timer:** Days left until next recommended deep clean / litter change.
 - **Deep Clean Due:** The same deadline as a timestamp, so it survives reboots
   on both ends and shows up before the clock has synced.
-- **Calibration Last Performed:** Timestamp of the last completed scale
+- **Calibration Last Performed:** Diagnostic; timestamp of the last completed scale
   calibration. Unavailable until one has been run.
 - **Litter Added:** Grams poured in at the last top-up or deep clean.
 - **Maintenance:** Event entity that fires `scoop`, `top_up`, `deep_clean` or
