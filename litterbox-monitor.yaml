@@ -6,13 +6,13 @@ substitutions:
   # Enables the corresponding cat sensors.
   # Add or remove up to 5 cats as needed.
   cats:
-    - "Cat 1"
-    - "Cat 2"
+    - "Lucy"
+    - "Osiris"
 
   # Timezone of the device, used for daily visits sensors
   # See https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
   # for valid values, e.g. "Europe/Bucharest", "America/New_York", "GMT0"
-  timezone: "GMT0"
+  timezone: "Australia/Melbourne"
 
 
   ## Internal parameters
@@ -80,7 +80,7 @@ substitutions:
   # never holds it for top_up_settle_time and top-ups go unrecognised. The
   # Still Stretch sensors show how long your cats hold still under 1, 1.5 and
   # 2 g: pick a limit they stay well short of top_up_settle_time at.
-  top_up_still_sigma: "1.0" # g
+  top_up_still_sigma: "1.5" # g — this board: under 1 g it never held 30 s (16 s max); 143 s under 1.5 g
 
 globals:
   ## General state
@@ -238,8 +238,9 @@ esp32:
   framework:
     type: esp-idf
 
+  variant: ESP32
 logger:
-  level: INFO
+  level: DEBUG
 
 api:
   encryption:
@@ -286,7 +287,7 @@ api:
 
 ota:
   - platform: esphome
-    password: !secret litterbox_ota_password
+    encryption:
 
 wifi:
   ssid: !secret wifi_ssid
@@ -513,8 +514,8 @@ sensor:
   - platform: hx711
     id: hx711_analog_value
     name: "Analog sensor value"
-    dout_pin: GPIO16
-    clk_pin: GPIO4
+    dout_pin: GPIO32
+    clk_pin: GPIO33
     gain: 128
     update_interval: 100ms
     entity_category: diagnostic
