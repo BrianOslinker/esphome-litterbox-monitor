@@ -120,6 +120,12 @@ globals:
     type: float # kg
     initial_value: "NAN"
     restore_value: True
+  # Day the daily counters belong to (year * 1000 + day of year). The
+  # counters survive reboots, so the reset has to as well.
+  - id: daily_counters_day
+    type: int
+    initial_value: "0"
+    restore_value: True
 
 
   ## Event-related state variables
@@ -273,17 +279,14 @@ time:
     # The countdown is NAN until the clock is valid; don't wait a minute more.
     on_time_sync:
       - component.update: litter_life_left
+      # Catch up on a midnight missed while powered off or without a clock.
+      - script.execute: roll_daily_counters
     on_time:
       - hours: 0
         minutes: 0
         seconds: 0
         then:
-          - lambda: !lambda |-
-              for (int i = 0; i < 5; i++) {
-                id(cat_daily_visits)[i] = 0;
-                id(cat_daily_pees)[i] = 0;
-                id(cat_daily_poops)[i] = 0;
-              }
+          - script.execute: roll_daily_counters
 
 sensor:
 # Cat sensors
