@@ -282,6 +282,22 @@ api:
                   level: ERROR
                   tag: calibration
                   format: "Ignored: run calibration_tare first, and pass a known weight above 0 kg"
+    # Fix a calibration done with the known weight entered wrong (rounded to
+    # the old 100 g step, say) without redoing it: every reading scales by
+    # actual/entered, so the slope scales by entered/actual.
+    - service: correct_calibration_weight
+      variables:
+        entered_g: float
+        actual_g: float
+      then:
+        - lambda: !lambda |-
+            if (!(entered_g > 0.0f && actual_g > 0.0f) || fabsf(actual_g / entered_g - 1.0f) > 0.1f) {
+              ESP_LOGE("calibration", "Ignored: weights must be positive and within 10%% of each other");
+              return;
+            }
+            id(calibration_coefficient) *= entered_g / actual_g;
+            ESP_LOGI("calibration", "Coefficient rescaled by %.5f (%.0f g entered, %.0f g actual)",
+                     entered_g / actual_g, entered_g, actual_g);
 
 ota:
   - platform: esphome
