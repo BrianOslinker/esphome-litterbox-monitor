@@ -217,6 +217,7 @@ That's it — the monitor is ready to use.
   count before calibration is applied.
 - **WiFi Signal:** Diagnostic RSSI in dBm, published once a minute as the median
   of four samples.
+- **Uptime:** Diagnostic (disabled by default); time since the last boot.
 
 ### Number Entities
 
@@ -228,6 +229,7 @@ That's it — the monitor is ready to use.
 
 ### Buttons
 
+- **Restart:** Reboots the monitor (disabled by default).
 - **Reset Deep Clean Timer:** Resets the deep clean countdown.
 - **Set Empty Box Weight:** Takes the current reading as the empty box's
   weight. Put the empty box on the monitor first.
