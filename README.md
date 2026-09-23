@@ -253,6 +253,9 @@ That's it — the monitor is ready to use.
 - `set_cat_weight`: Set a cat's weight manually via Home Assistant or API.
   - Parameters: `cat` (int, 1-5), `weight` (float, kg, 0-20; 0 clears the slot)
   - Example: To set Cat 1's weight to 5.2kg, call `set_cat_weight` with `cat=1`, `weight=5.2`.
+- `set_still_limit`: Set the top-up stillness limit without reflashing (see
+  [Box Tracking](docs/BOX_TRACKING.md)). Sticks across reboots.
+  - Parameters: `limit_g` (float, grams, 0.3-5)
 
 ### Synchronize Multiple Litterboxes
 

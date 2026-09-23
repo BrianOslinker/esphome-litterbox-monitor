@@ -37,7 +37,8 @@ For a starting point, leave the box untouched and press `Measure Scale
 Noise`. After 2 minutes "Scale Noise Result" gives the board's typical 1 s
 spread and the smallest limit the box held for twice `top_up_settle_time`.
 That is the floor for still litter; the Still Stretch diagnostics show how
-far above your cats sit.
+far above your cats sit. Try a value with the `set_still_limit` action (no
+reflash needed); "Still Limit" shows the one in use.
 
 `BoxMonitor` in [state_analyzer.h](../state_analyzer.h) sees every sample,
 not just during events, because the interesting moments straddle event
