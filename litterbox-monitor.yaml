@@ -1250,7 +1250,6 @@ script:
           id(event_open) = false;
           id(suppress_visit) = false;
           id(cat_detected).publish_state(false);
-          id(current_cat_weight).publish_state(0);
           id(tare_value) = id(hx711_raw_value).state;
           id(auto_tare_value) = 0;
           id(event_start) = 0;
