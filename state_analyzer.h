@@ -684,6 +684,7 @@ struct BoxConfig {
   int scoop_min_s;     // ...unless the event is at least this long
   int settle_s;        // inert seconds before a top-up ends the event
   float lid_g = 0.0f;  // weight of a removable lid; 0 = no lid, nothing tracked
+  float lid_tol_g = 30.0f;  // a step within this of lid_g is the lid
 };
 
 struct BoxEvent {
@@ -898,14 +899,9 @@ class BoxMonitor {
    */
   static constexpr float LEVEL_TOL = 50.0f;
   /**
-   * A step within LID_TOL_FRAC of lid_g is the lid, the same 10 % a cat is
-   * matched by, but never tighter than LID_TOL_MIN_G: a lid catching on a
-   * wall moved one box's steps by up to ~30 g (477-529 g; clear of the wall
-   * they were 496-503 g for a 499 g lid). Coming off, the first plateau may
-   * already have a scoopful out, so up to LID_SCOOP_G more is accepted.
+   * Coming off, the first plateau may already have a scoopful out, so up to
+   * this much more than lid_g + lid_tol_g is accepted as the lid.
    */
-  static constexpr float LID_TOL_FRAC = 0.1f;
-  static constexpr float LID_TOL_MIN_G = 30.0f;
   static constexpr float LID_SCOOP_G = 150.0f;
   /** A lid lifted off for a moment holds still for only a second or two. */
   static constexpr int LID_HOLD = HZ;
@@ -956,8 +952,6 @@ class BoxMonitor {
   /** What the event is measured against, lid on. */
   float ev_base() const { return with_lid(base_g_, ev_lid_off_); }
 
-  float lid_tol() const { return std::max(LID_TOL_FRAC * cfg_.lid_g, LID_TOL_MIN_G); }
-
   bool empty_without_lid(float g) const {
     return cfg_.lid_g > 0.0f && std::abs(g + cfg_.lid_g - cfg_.box_g) < cfg_.empty_tol_g;
   }
@@ -967,7 +961,7 @@ class BoxMonitor {
     pl_lid_off_ = lid_off_;
     if (cfg_.lid_g <= 0.0f || below_box(g) || std::isnan(last_level_g_)) return;
     float d = g - last_level_g_;
-    float tol = lid_tol();
+    float tol = cfg_.lid_tol_g;
     if (!lid_off_ && d <= -(cfg_.lid_g - tol) && d >= -(cfg_.lid_g + tol + LID_SCOOP_G)) {
       lid_off_ = true;
       lid_ref_g_ = last_level_g_;
