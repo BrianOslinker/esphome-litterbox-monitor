@@ -120,8 +120,7 @@ globals:
     restore_value: False
 
   # The previous event ended on the inactivity timeout with a cat still in
-  # the box. Its per-cat visit was already counted; the next event adds the
-  # waste and counts it towards Visits since clean.
+  # the box. The visit was already counted; the next event only adds waste.
   - id: suppress_visit
     type: bool
     initial_value: "false"
@@ -1172,13 +1171,15 @@ script:
               ESP_LOGI("SA", "%.2f kg still on the scale, waiting for it to leave", end_tared_kg);
             } else if (heavy) {
               ESP_LOGW("SA", "%.2f kg sat through two timeouts; taring without counting waste", end_tared_kg);
-            } else {
-              if (end_tared_kg > 0.0f) {
-                id(waste_weight).publish_state(id(waste_weight).state + end_tared_kg * 1000.0f);
-              }
-              // Counted even when this continues an event the timeout closed with
-              // the cat still inside: that first half skipped it (and a "cat"
-              // that sits through two timeouts, above, is never counted).
+            } else if (end_tared_kg > 0.0f) {
+              id(waste_weight).publish_state(id(waste_weight).state + end_tared_kg * 1000.0f);
+            }
+            // A visit is a recognised cat, counted once: in the event that
+            // recognised it, also when the timeout closed that with the cat
+            // still inside (the event after is it leaving). With no cat
+            // weight set there is nothing to recognise, so any event this
+            // long counts.
+            if (!continued && (cat_event || min_cat_kg == 0.0f)) {
               id(visits).publish_state(id(visits).state + 1);
             }
           }
