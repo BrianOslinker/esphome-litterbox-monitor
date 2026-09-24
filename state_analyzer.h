@@ -963,11 +963,14 @@ class BoxMonitor {
    */
   static constexpr float LEVEL_TOL = 50.0f;
   /**
-   * A step within this of lid_g is the lid. Measured: 478-511 g steps for a
-   * 505 g lid, the spread from how it sits. Coming off, the first plateau may
-   * already have a scoopful out, so up to LID_SCOOP_G more is accepted.
+   * A step within LID_TOL_FRAC of lid_g is the lid, the same 10 % a cat is
+   * matched by, but never tighter than LID_TOL_MIN_G: how a lid sits moves
+   * its reading by up to ~30 g whatever it weighs (477-529 g steps for a
+   * 505 g lid). Coming off, the first plateau may already have a scoopful
+   * out, so up to LID_SCOOP_G more is accepted.
    */
-  static constexpr float LID_TOL = 50.0f;
+  static constexpr float LID_TOL_FRAC = 0.1f;
+  static constexpr float LID_TOL_MIN_G = 30.0f;
   static constexpr float LID_SCOOP_G = 150.0f;
   /** A lid lifted off for a moment holds still for only a second or two. */
   static constexpr int LID_HOLD = HZ;
@@ -1027,6 +1030,8 @@ class BoxMonitor {
   /** What the event is measured against, lid on. */
   float ev_base() const { return with_lid(base_g_, ev_lid_off_); }
 
+  float lid_tol() const { return std::max(LID_TOL_FRAC * cfg_.lid_g, LID_TOL_MIN_G); }
+
   bool empty_without_lid(float g) const {
     return cfg_.lid_g > 0.0f && std::abs(g + cfg_.lid_g - cfg_.box_g) < cfg_.empty_tol_g;
   }
@@ -1036,12 +1041,13 @@ class BoxMonitor {
     pl_lid_off_ = lid_off_;
     if (cfg_.lid_g <= 0.0f || below_box(g) || std::isnan(last_level_g_)) return;
     float d = g - last_level_g_;
-    if (!lid_off_ && d <= -(cfg_.lid_g - LID_TOL) && d >= -(cfg_.lid_g + LID_TOL + LID_SCOOP_G)) {
+    float tol = lid_tol();
+    if (!lid_off_ && d <= -(cfg_.lid_g - tol) && d >= -(cfg_.lid_g + tol + LID_SCOOP_G)) {
       lid_off_ = true;
       lid_ref_g_ = last_level_g_;
-    } else if (lid_off_ && (std::abs(d - cfg_.lid_g) <= LID_TOL ||
+    } else if (lid_off_ && (std::abs(d - cfg_.lid_g) <= tol ||
                             // back to the level it left with the lid on: a missed step
-                            std::abs(g - lid_ref_g_) <= LID_TOL)) {
+                            std::abs(g - lid_ref_g_) <= tol)) {
       lid_off_ = false;
     }
     pl_lid_off_ = lid_off_;
