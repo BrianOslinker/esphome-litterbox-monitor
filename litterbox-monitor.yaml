@@ -79,7 +79,9 @@ substitutions:
   # The wobble limit for the above. 1 g suits a quiet board; on a noisier one
   # the reading never holds it for top_up_settle_time, and top-ups end on the
   # inactivity timeout as visits instead. Raise it to a limit your cats stay
-  # well short of top_up_settle_time at.
+  # well short of top_up_settle_time at. This is the first value of the Still
+  # Limit setting, which you can change from Home Assistant afterwards (see
+  # Still Stretch and Measure Scale Noise).
   top_up_still_sigma: "1.0" # g
 
 globals:
@@ -520,6 +522,26 @@ sensor:
           d2 = d1;
           d1 = g;
           bm.process(med);
+          if (bm.noise_probe_running() && id(vibration_detected).state) {
+            bm.cancel_noise_probe();
+            id(scale_noise_result).publish_state("Cancelled: the box moved. Press again and leave it untouched");
+          }
+          if (bm.take_noise_probe_result()) {
+            const int need_s = 2 * ${top_up_settle_time};
+            float med_g = bm.noise_probe_median_g();
+            float lim_g = bm.noise_probe_limit_g(need_s);
+            id(scale_noise).publish_state(med_g);
+            id(suggested_still_limit).publish_state(lim_g);
+            char msg[128];
+            if (std::isnan(lim_g)) {
+              snprintf(msg, sizeof msg, "Typical spread %.2f g; never held %d s under 3 g: check wiring and power",
+                       med_g, need_s);
+            } else {
+              snprintf(msg, sizeof msg, "Typical spread %.2f g; suggested still limit %.1f g (now %.1f g)",
+                       med_g, lim_g, id(still_limit).state);
+            }
+            id(scale_noise_result).publish_state(msg);
+          }
           // Publish once at startup as well as on change: the tracker starts in
           // NORMAL, so a box that is simply sitting there never trips an edge
           // and the sensor would stay unpublished until the first lift. Wait
@@ -699,6 +721,35 @@ sensor:
     accuracy_decimals: 0
     update_interval: never
     disabled_by_default: True
+  # Longest stretch of the last event that held still (1 s σ) under the
+  # Still Limit: a cat should stay well short of top_up_settle_time.
+  - platform: template
+    id: still_stretch
+    name: "Still Stretch"
+    icon: "mdi:timer-sand"
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: never
+  # From the last Measure Scale Noise run: the typical 1 s spread, and the
+  # smallest limit the untouched box held for twice top_up_settle_time.
+  - platform: template
+    id: scale_noise
+    name: "Scale Noise"
+    icon: "mdi:waveform"
+    entity_category: diagnostic
+    unit_of_measurement: "g"
+    accuracy_decimals: 2
+    update_interval: never
+  - platform: template
+    id: suggested_still_limit
+    name: "Suggested Still Limit"
+    icon: "mdi:waveform"
+    entity_category: diagnostic
+    unit_of_measurement: "g"
+    accuracy_decimals: 1
+    update_interval: never
   - platform: template
     name: "Visits since clean"
     id: visits
@@ -792,6 +843,13 @@ text_sensor:
     icon: "mdi:state-machine"
     entity_category: diagnostic
     update_interval: never
+  # Outcome of the last Measure Scale Noise run.
+  - platform: template
+    id: scale_noise_result
+    name: "Scale Noise Result"
+    icon: "mdi:waveform"
+    entity_category: diagnostic
+    update_interval: never
   # normal / lifted (monitor in the air) / off (bare board) / empty (washed
   # box back, nothing in it yet)
   - platform: template
@@ -857,6 +915,23 @@ number:
     mode: box
     initial_value: "4"
     restore_value: True
+  # 1 s spread under which the box counts as still for top-ups (see
+  # top_up_still_sigma, its first value).
+  - platform: template
+    name: "Still Limit"
+    id: still_limit
+    icon: "mdi:waveform"
+    unit_of_measurement: "g"
+    entity_category: config
+    optimistic: true
+    min_value: 0.5
+    max_value: 5
+    step: 0.1
+    mode: box
+    initial_value: "${top_up_still_sigma}"
+    restore_value: True
+    on_value:
+      - script.execute: configure_box_monitor
   - platform: template
     name: "Empty Box Weight"
     id: litterbox_weight
@@ -961,6 +1036,16 @@ button:
           id(waste_weight).publish_state(0);
           id(visits).publish_state(0);
           id(litter_weight).publish_state(id(hx711_raw_value).state - (id(litterbox_weight).state/1000.0));
+  # Leave the box untouched for 2 minutes: measures how still this board
+  # reads and suggests a Still Limit (see Scale Noise Result).
+  - platform: template
+    name: "Measure Scale Noise"
+    icon: "mdi:waveform"
+    entity_category: config
+    on_press:
+      - lambda: !lambda |-
+          get_box_monitor().start_noise_probe(120 * 10);
+          id(scale_noise_result).publish_state("Measuring: leave the box untouched for 2 min");
   - platform: template
     name: "Calibrate Scale"
     icon: mdi:scale-bathroom
@@ -1011,7 +1096,7 @@ script:
           cfg.scoop_min_g = -(${min_clean_event_weight});
           cfg.scoop_min_s = ${min_clean_event_duration};
           cfg.settle_s = ${top_up_settle_time};
-          cfg.inert_sigma_g = ${top_up_still_sigma};
+          cfg.inert_sigma_g = id(still_limit).state;
           get_box_monitor().configure(cfg);
 
   # Start recording: activity just began, or the previous event closed while
@@ -1075,6 +1160,7 @@ script:
                    box_event_str(box.kind), box.level_g, box.litter_added_g,
                    box.box_measured_g, zero_g, box.zero_valid ? "" : " (unchecked)",
                    (int) box.absent);
+          id(still_stretch).publish_state(box.longest_still_s);
 
           // Maintenance outranks the visit analysis: a bag that happens to
           // weigh what a cat does matches the cat by weight, but it went

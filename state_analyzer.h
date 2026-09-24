@@ -692,6 +692,7 @@ struct BoxEvent {
   bool zero_valid;
   bool absent;           // box not on the board at the end — do not tare
   bool scooped;          // top-up: litter came out before the bag went in
+  float longest_still_s;  // longest inert stretch during the event
 };
 
 class BoxMonitor {
@@ -713,6 +714,42 @@ class BoxMonitor {
     zero_error_g_ = 0.0f;
     box_measured_g_ = 0.0f;
     inert_len_ = 0;
+    inert_max_ = 0;
+  }
+
+  /**
+   * Scale noise probe: for `samples` readings (box left untouched) record the
+   * 1 s spread, and how long it stayed under each candidate limit from 1.0 to
+   * 3.0 g, to size inert_sigma_g for this board.
+   */
+  void start_noise_probe(int samples) {
+    probe_left_ = probe_total_ = samples;
+    probe_finished_ = false;
+    for (auto &b : probe_hist_) b = 0;
+    for (int i = 0; i < PROBE_LIMITS; i++) probe_run_[i] = probe_best_[i] = 0;
+  }
+  void cancel_noise_probe() { probe_left_ = 0; }
+  bool noise_probe_running() const { return probe_left_ > 0; }
+  /** True once, right after a probe has finished. */
+  bool take_noise_probe_result() {
+    if (!probe_finished_) return false;
+    probe_finished_ = false;
+    return true;
+  }
+  /** Median 1 s spread over the last probe, in grams. */
+  float noise_probe_median_g() const {
+    int seen = 0;
+    for (int b = 0; b < PROBE_BINS; b++) {
+      seen += probe_hist_[b];
+      if (seen * 2 > probe_total_) return (b + 0.5f) * PROBE_BIN_G;
+    }
+    return NAN;
+  }
+  /** Smallest candidate limit the last probe held for `need_s` straight, or NAN. */
+  float noise_probe_limit_g(int need_s) const {
+    for (int i = 0; i < PROBE_LIMITS; i++)
+      if (probe_best_[i] >= need_s * HZ) return probe_limit_g(i);
+    return NAN;
   }
 
   /** Every sample, in absolute grams, event or not. */
@@ -734,6 +771,18 @@ class BoxMonitor {
       close_plateau();
     }
     inert_len_ = sd < cfg_.inert_sigma_g ? inert_len_ + 1 : 0;
+    if (inert_len_ > inert_max_) inert_max_ = inert_len_;
+    if (probe_left_ > 0) {
+      // Top bin for anything off the scale, NAN included.
+      int bin = sd >= 0.0f && sd < PROBE_BINS * PROBE_BIN_G
+                    ? static_cast<int>(sd / PROBE_BIN_G) : PROBE_BINS - 1;
+      probe_hist_[bin]++;
+      for (int i = 0; i < PROBE_LIMITS; i++) {
+        probe_run_[i] = sd < probe_limit_g(i) ? probe_run_[i] + 1 : 0;
+        if (probe_run_[i] > probe_best_[i]) probe_best_[i] = probe_run_[i];
+      }
+      if (--probe_left_ == 0) probe_finished_ = true;
+    }
 
     // Box state. Absence latches until a stable plateau with something in
     // the box shows up again, so "off in one event, back in the next" works.
@@ -812,6 +861,7 @@ class BoxMonitor {
     r.zero_valid = zero_valid_;
     r.absent = absent_;
     r.scooped = false;
+    r.longest_still_s = inert_max_ / static_cast<float>(HZ);
     float delta = r.level_g - base_g_;
 
     if (absent_) {
@@ -868,6 +918,11 @@ class BoxMonitor {
   static constexpr int WINDOW = 10;
   /** Same bar as the analyzer's stability: sqrt(250). */
   static constexpr float PLATEAU_SIGMA = 15.811388f;
+  /** Noise probe: candidate limits 1.0..3.0 g in 0.1 g, spread histogram 0..5 g. */
+  static constexpr int PROBE_LIMITS = 21;
+  static constexpr int PROBE_BINS = 100;
+  static constexpr float PROBE_BIN_G = 0.05f;
+  static float probe_limit_g(int i) { return 1.0f + 0.1f * i; }
   static constexpr int MIN_PLATEAU = 2 * HZ;
   static constexpr int HOLD = 3 * HZ;
   /**
@@ -883,6 +938,13 @@ class BoxMonitor {
   bool absent_ = false;
   int hold_ = 0;
   int inert_len_ = 0;
+  int inert_max_ = 0;
+  int probe_left_ = 0;
+  int probe_total_ = 0;
+  bool probe_finished_ = false;
+  uint16_t probe_hist_[PROBE_BINS] = {};
+  uint16_t probe_run_[PROBE_LIMITS] = {};
+  uint16_t probe_best_[PROBE_LIMITS] = {};
   // open plateau (Welford, double: sums of 1e4 g over 1e4 samples lose float bits)
   int pl_start_ = 0;
   int pl_n_ = 0;

@@ -32,6 +32,14 @@ limit your cats stay well short of 30 s at; 1.5 g works on a board whose
 settled 1 s spread is about 0.55 g. The readings go through a median of three
 before this test, so a single glitched sample doesn't reset it.
 
+The limit in use is the "Still Limit" setting, which starts at
+`top_up_still_sigma`. For a starting point, leave the box untouched and press
+`Measure Scale Noise`. After 2 minutes "Scale Noise Result" gives the board's
+typical 1 s spread and the smallest limit the box held for twice
+`top_up_settle_time`: the floor for still litter. "Still Stretch" then shows,
+for every event, the longest stretch under the limit in use, so a few days of
+visits show how far below 30 s your cats stay.
+
 `BoxMonitor` in [state_analyzer.h](../state_analyzer.h) sees every sample,
 not just during events, because the interesting moments straddle event
 boundaries (box leaves in one event, comes back in the next). It tracks two

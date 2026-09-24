@@ -209,6 +209,11 @@ That's it — the monitor is ready to use.
   came back from a deep clean, to compare with the Empty Box Weight setting.
 - **Zero Drift:** Diagnostic; what the bare board read the last time the box
   was off, before the zero was corrected.
+- **Still Stretch:** Diagnostic; the longest stretch of the last event that
+  held still under the Still Limit, in seconds. A cat visit should stay well
+  short of `top_up_settle_time`; a top-up reaches it.
+- **Scale Noise / Suggested Still Limit / Scale Noise Result:** Diagnostic;
+  the outcome of the last `Measure Scale Noise` run.
 - **Raw/Unfiltered/Tared Weight:** Diagnostic weight readings.
 - **Analog sensor value:** Diagnostic (disabled by default); the raw HX711
   count before calibration is applied.
@@ -221,6 +226,7 @@ That's it — the monitor is ready to use.
 - **Classification Threshold:** Standard deviation threshold (in grams) that separates urination from defecation. The default of 4 g works well out of the box; raise it if defecation events are being over-reported, lower it if they're being missed.  See [PoopSense](docs/POOPSENSE.md) for details.
 - **Calibration Known Weight:** Weight of calibration objects used during scale setup, in grams (1 g steps, up to 40 kg). Kept across reboots.
 - **Empty Box Weight:** Weight of the empty litterbox for improved litter remaining calculations. Also what deep-clean detection compares against; left at 0, deep cleans are not detected.
+- **Still Limit:** The 1 s spread (grams) under which the box counts as still for top-up detection. Starts at `top_up_still_sigma` (1 g); raise it on a noisier board. See [Box Tracking](docs/BOX_TRACKING.md).
 - **Full Litter Weight:** How much litter (in kg) a freshly filled box holds — what the "Litter Level" percentage counts as 100%. Left at 0, that sensor stays unavailable.
 
 ### Buttons
@@ -229,6 +235,8 @@ That's it — the monitor is ready to use.
 - **Reset Clean:** Resets tare, litter, waste, and visit counters.
 
   Only required if the automatic clean detection failed.
+- **Measure Scale Noise:** Leave the box untouched for 2 minutes; reports the
+  board's typical 1 s spread and suggests a Still Limit.
 - **Calibrate Scale:** Runs the two-step calibration: first press tares the
   bare board, second press (with the known weight on) sets the span. See
   [Calibration](#calibration).
