@@ -260,7 +260,8 @@ time:
     timezone: ${timezone}
     id: homeassistant_time
     on_time_sync:
-      # The countdown is NAN until the clock is valid; don't wait a minute more.
+      # The countdown reads NAN until the clock is valid: refresh it now
+      # rather than at its next update.
       - component.update: litter_life_left
       # Catch up on a midnight missed while powered off or without a clock.
       - script.execute: roll_daily_counters
@@ -1077,22 +1078,30 @@ script:
           // inert, and that is the stronger evidence.
           if (visit != nullptr && box.kind == BoxEventKind::NONE) {
             const StateResult &result = *visit;
-            id(elimination_type_sensor).publish_state(
-                elimination_type_str(result.elimination_type));
-            id(current_cat_weight).publish_state(result.cat_weight / 1000.0f);
-            id(event_duration_sensor).publish_state(duration);
+            if (continued) {
+              // The second half of a visit the timeout split: the cat
+              // leaving. It adds to the duration; the result stays the first
+              // half's, which the daily counts were taken from.
+              id(event_duration_sensor).publish_state(
+                  id(event_duration_sensor).state + duration);
+            } else {
+              id(elimination_type_sensor).publish_state(
+                  elimination_type_str(result.elimination_type));
+              id(current_cat_weight).publish_state(result.cat_weight / 1000.0f);
+              id(event_duration_sensor).publish_state(duration);
 
-            // Std dev of the first elimination period, or unknown without
-            // one: the previous visit's value would pass for this one's.
-            float std_dev = NAN;
-            for (int i = 0; i < result.period_count; i++) {
-              if (result.periods[i].state == AnalyzerState::ELIMINATING &&
-                  result.periods[i].std_dev >= 0.0f) {
-                std_dev = result.periods[i].std_dev;
-                break;
+              // Std dev of the first elimination period, or unknown without
+              // one: the previous visit's value would pass for this one's.
+              float std_dev = NAN;
+              for (int i = 0; i < result.period_count; i++) {
+                if (result.periods[i].state == AnalyzerState::ELIMINATING &&
+                    result.periods[i].std_dev >= 0.0f) {
+                  std_dev = result.periods[i].std_dev;
+                  break;
+                }
               }
+              id(elimination_std_dev_sensor).publish_state(std_dev);
             }
-            id(elimination_std_dev_sensor).publish_state(std_dev);
 
             if (cat_event) {
               int ci = result.detected_cat;
