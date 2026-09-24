@@ -42,7 +42,8 @@ things:
 When an event ends, before the tare moves, the first rule that fits wins:
 
 1. **Box still absent.** No verdict yet. Tare stays where it was.
-2. **Box came back empty** (within 150 g of Empty Box Weight, held 3 s)
+2. **Box came back empty** (within 150 g of Empty Box Weight, with its lid
+   or, if Lid Weight is set, without it; held 3 s)
    → `deep_clean`. Litter weight becomes whatever has gone in since, waste
    and visits reset, deep-clean timer restarts.
 3. **Monitor lifted and set back** within 100 g of where it was → `lifted`.
@@ -51,8 +52,11 @@ When an event ends, before the tare moves, the first rule that fits wins:
    event, at least 300 g gained, last 30 s inert → `top_up`, measured from
    that lowest point. If the lowest point is a scoop's worth below where the
    event started, a `scoop` is reported alongside.
-6. **At least 20 g lighter, no cat matched**, and either the event ran 30 s
-   or the box left the board → `scoop`.
+6. **At least 20 g lighter, no cat matched**, and either the event ran 30 s,
+   the box left the board, or its lid came off → `scoop`.
+
+With a Lid Weight set, every level in these rules is taken as if the lid
+were on (see [Boxes with a lid](#boxes-with-a-lid)).
 
 Otherwise it's a plain cat visit (or nothing). A maintenance verdict
 overrides the cat analysis: if a bag went inert on the scale, it was a bag,
