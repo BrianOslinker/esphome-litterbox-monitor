@@ -89,9 +89,10 @@ box off (no minimum duration for a scoop). An empty box also counts for a
 deep clean with its lid on or off.
 
 The lid has to sit still, off or on, for about two seconds to be seen: a
-lid lifted and put straight back is just a wobble, which is harmless. Press
-it down the same way each time; how it sits moved the reading by up to 30 g
-on one box.
+lid lifted and put straight back is just a wobble, which is harmless. Keep
+the box and lid clear of walls: a lid catching on one moved the reading by
+up to 30 g, where clear of it the level with the lid on came back within a
+couple of grams.
 
 All thresholds are substitutions at the top of the YAML:
 `box_off_tolerance`, `box_empty_tolerance`, `monitor_lift_threshold`,
