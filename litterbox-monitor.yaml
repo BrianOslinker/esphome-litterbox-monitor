@@ -1158,7 +1158,7 @@ script:
           get_analyzer().attach_buffer(&get_weight_buf());
           get_sample_idx() = 0;
           get_box_monitor().begin_event((id(tare_value) + id(auto_tare_value)) * 1000.0f);
-          get_filter_compare().begin_event();  // local only
+          get_filter_compare().begin_event((id(tare_value) + id(auto_tare_value)) * 1000.0f);  // local only
           ESP_LOGD("SA", "Event start, analyzer reset");
 
   # Close the event: score the visit, work out what happened to the box,
