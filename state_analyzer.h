@@ -677,7 +677,10 @@ struct BoxConfig {
   float scoop_min_g;   // drop (positive number) that counts as a scoop
   int scoop_min_s;     // ...unless the event is at least this long
   int settle_s;        // inert seconds before a top-up ends the event
-  float inert_sigma_g = 1.0f;  // 1 s spread below which the box counts as inert
+  // 1 s spread below which the box is inert: nothing alive on it. Over 1552
+  // verified visits the longest a cat held a 1 s window under 1 g was 11 s;
+  // poured litter holds it forever. A noisier board needs a higher limit.
+  float inert_sigma_g = 1.0f;
 };
 
 struct BoxEvent {
@@ -689,7 +692,7 @@ struct BoxEvent {
   bool zero_valid;
   bool absent;           // box not on the board at the end — do not tare
   bool scooped;          // top-up: litter came out before the bag went in
-  float longest_still_s[3];  // longest stretch this event under STILL_PROBE_G
+  float longest_still_s;  // longest inert stretch during the event
 };
 
 class BoxMonitor {
@@ -711,7 +714,7 @@ class BoxMonitor {
     zero_error_g_ = 0.0f;
     box_measured_g_ = 0.0f;
     inert_len_ = 0;
-    for (int i = 0; i < 3; i++) still_run_[i] = still_max_[i] = 0;
+    inert_max_ = 0;
   }
 
   /**
@@ -768,12 +771,12 @@ class BoxMonitor {
       close_plateau();
     }
     inert_len_ = sd < cfg_.inert_sigma_g ? inert_len_ + 1 : 0;
-    for (int i = 0; i < 3; i++) {
-      still_run_[i] = sd < STILL_PROBE_G[i] ? still_run_[i] + 1 : 0;
-      if (still_run_[i] > still_max_[i]) still_max_[i] = still_run_[i];
-    }
+    if (inert_len_ > inert_max_) inert_max_ = inert_len_;
     if (probe_left_ > 0) {
-      probe_hist_[std::min(PROBE_BINS - 1, static_cast<int>(sd / PROBE_BIN_G))]++;
+      // Top bin for anything off the scale, NAN included.
+      int bin = sd >= 0.0f && sd < PROBE_BINS * PROBE_BIN_G
+                    ? static_cast<int>(sd / PROBE_BIN_G) : PROBE_BINS - 1;
+      probe_hist_[bin]++;
       for (int i = 0; i < PROBE_LIMITS; i++) {
         probe_run_[i] = sd < probe_limit_g(i) ? probe_run_[i] + 1 : 0;
         if (probe_run_[i] > probe_best_[i]) probe_best_[i] = probe_run_[i];
@@ -858,7 +861,7 @@ class BoxMonitor {
     r.zero_valid = zero_valid_;
     r.absent = absent_;
     r.scooped = false;
-    for (int i = 0; i < 3; i++) r.longest_still_s[i] = still_max_[i] / static_cast<float>(HZ);
+    r.longest_still_s = inert_max_ / static_cast<float>(HZ);
     float delta = r.level_g - base_g_;
 
     if (absent_) {
@@ -915,14 +918,6 @@ class BoxMonitor {
   static constexpr int WINDOW = 10;
   /** Same bar as the analyzer's stability: sqrt(250). */
   static constexpr float PLATEAU_SIGMA = 15.811388f;
-  /**
-   * Inert: nothing alive on the box, below cfg_.inert_sigma_g (1 g default).
-   * Over 1552 verified visits the longest a cat held a 1 s window under 1 g
-   * was 11 s; poured litter holds it forever. A noisier board needs a higher
-   * limit; these probes record, per event, how long it held still under each,
-   * to show where a board's own cats top out.
-   */
-  static constexpr float STILL_PROBE_G[3] = {1.0f, 1.5f, 2.0f};
   /** Noise probe: candidate limits 1.0..3.0 g in 0.1 g, spread histogram 0..5 g. */
   static constexpr int PROBE_LIMITS = 21;
   static constexpr int PROBE_BINS = 100;
@@ -943,8 +938,7 @@ class BoxMonitor {
   bool absent_ = false;
   int hold_ = 0;
   int inert_len_ = 0;
-  int still_run_[3] = {};
-  int still_max_[3] = {};
+  int inert_max_ = 0;
   int probe_left_ = 0;
   int probe_total_ = 0;
   bool probe_finished_ = false;

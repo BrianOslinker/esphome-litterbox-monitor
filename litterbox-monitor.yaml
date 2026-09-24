@@ -76,12 +76,12 @@ substitutions:
   # to count as one.
   top_up_settle_time: "30" # seconds
 
-  # The wobble limit for the above. 1 g suits a quiet board; a noisier one
-  # never holds it for top_up_settle_time and top-ups go unrecognised. The
-  # Still Stretch sensors show how long your cats hold still under 1, 1.5 and
-  # 2 g: pick a limit they stay well short of top_up_settle_time at. This is
-  # the starting value; the set_still_limit action changes it without
-  # reflashing, and that choice then sticks.
+  # The wobble limit for the above. 1 g suits a quiet board; on a noisier one
+  # the reading never holds it for top_up_settle_time, and top-ups end on the
+  # inactivity timeout as visits instead. Raise it to a limit your cats stay
+  # well short of top_up_settle_time at. This is the first value of the Still
+  # Limit setting, which you can change from Home Assistant afterwards (see
+  # Still Stretch and Measure Scale Noise).
   top_up_still_sigma: "1.5" # g — this board: under 1 g it never held 30 s (16 s max); 143 s under 1.5 g
 
 globals:
@@ -160,12 +160,6 @@ globals:
   
   
   ## Scale calibration parameters
-
-  # Top-up stillness limit in use, g (see top_up_still_sigma).
-  - id: still_limit_g
-    type: float
-    initial_value: "${top_up_still_sigma}"
-    restore_value: True
   
   # Auto-tare at event end
   - id: tare_value
@@ -311,21 +305,6 @@ api:
                   level: ERROR
                   tag: calibration
                   format: "Ignored: run calibration_tare first, and pass a known weight above 0 kg"
-    # Tune the top-up stillness limit without reflashing (see Still Stretch
-    # and Measure Scale Noise). Sticks across reboots.
-    - action: set_still_limit
-      variables:
-        limit_g: float
-      then:
-        - lambda: !lambda |-
-            if (!(limit_g >= 0.3f && limit_g <= 5.0f)) {
-              ESP_LOGE("box", "Invalid still limit %.2f g. Must be 0.3-5 g.", limit_g);
-              return;
-            }
-            id(still_limit_g) = limit_g;
-            ESP_LOGI("box", "Top-up still limit set to %.2f g", limit_g);
-        - script.execute: configure_box_monitor
-        - component.update: still_limit
 
 ota:
   - platform: esphome
@@ -616,8 +595,8 @@ sensor:
               snprintf(msg, sizeof msg, "Typical spread %.2f g; never held %d s under 3 g: check wiring and power",
                        med_g, need_s);
             } else {
-              snprintf(msg, sizeof msg, "Typical spread %.2f g; suggested still limit %.1f g (now %.2f g)",
-                       med_g, lim_g, id(still_limit_g));
+              snprintf(msg, sizeof msg, "Typical spread %.2f g; suggested still limit %.1f g (now %.1f g)",
+                       med_g, lim_g, id(still_limit).state);
             }
             id(scale_noise_result).publish_state(msg);
           }
@@ -810,29 +789,11 @@ sensor:
     accuracy_decimals: 0
     update_interval: 60s
     disabled_by_default: True
-  # Longest stretch of the last event that held still (1 s σ) under 1, 1.5
-  # and 2 g, for choosing top_up_still_sigma from your own cats' visits.
+  # Longest stretch of the last event that held still (1 s σ) under the
+  # Still Limit: a cat should stay well short of top_up_settle_time.
   - platform: template
-    id: still_stretch_1g
-    name: "Still Stretch 1 g"
-    icon: "mdi:timer-sand"
-    entity_category: diagnostic
-    unit_of_measurement: "s"
-    state_class: measurement
-    accuracy_decimals: 1
-    update_interval: never
-  - platform: template
-    id: still_stretch_1_5g
-    name: "Still Stretch 1.5 g"
-    icon: "mdi:timer-sand"
-    entity_category: diagnostic
-    unit_of_measurement: "s"
-    state_class: measurement
-    accuracy_decimals: 1
-    update_interval: never
-  - platform: template
-    id: still_stretch_2g
-    name: "Still Stretch 2 g"
+    id: still_stretch
+    name: "Still Stretch"
     icon: "mdi:timer-sand"
     entity_category: diagnostic
     unit_of_measurement: "s"
@@ -857,16 +818,6 @@ sensor:
     unit_of_measurement: "g"
     accuracy_decimals: 1
     update_interval: never
-  # The top-up stillness limit in use (top_up_still_sigma, or set_still_limit).
-  - platform: template
-    id: still_limit
-    name: "Still Limit"
-    icon: "mdi:waveform"
-    entity_category: diagnostic
-    unit_of_measurement: "g"
-    accuracy_decimals: 2
-    lambda: return id(still_limit_g);
-    update_interval: 60s
   - platform: template
     name: "Visits since clean"
     id: visits
@@ -1075,6 +1026,23 @@ number:
     mode: box
     initial_value: "4"
     restore_value: True
+  # 1 s spread under which the box counts as still for top-ups (see
+  # top_up_still_sigma, its first value).
+  - platform: template
+    name: "Still Limit"
+    id: still_limit
+    icon: "mdi:waveform"
+    unit_of_measurement: "g"
+    entity_category: config
+    optimistic: true
+    min_value: 0.5
+    max_value: 5
+    step: 0.1
+    mode: box
+    initial_value: "${top_up_still_sigma}"
+    restore_value: True
+    on_value:
+      - script.execute: configure_box_monitor
   - platform: template
     name: "Empty Box Weight"
     id: litterbox_weight
@@ -1225,7 +1193,7 @@ button:
           id(visits).publish_state(0);
           id(litter_weight).publish_state(id(hx711_raw_value).state - (id(litterbox_weight).state/1000.0));
   # Leave the box untouched for 2 minutes: measures how still this board
-  # reads and suggests top_up_still_sigma (see Scale Noise Result).
+  # reads and suggests a Still Limit (see Scale Noise Result).
   - platform: template
     name: "Measure Scale Noise"
     icon: "mdi:waveform"
@@ -1346,7 +1314,7 @@ script:
           cfg.scoop_min_g = -(${min_clean_event_weight});
           cfg.scoop_min_s = ${min_clean_event_duration};
           cfg.settle_s = ${top_up_settle_time};
-          cfg.inert_sigma_g = id(still_limit_g);
+          cfg.inert_sigma_g = id(still_limit).state;
           get_box_monitor().configure(cfg);
 
   # Start recording: activity just began, or the previous event closed while
@@ -1418,9 +1386,7 @@ script:
                    box_event_str(box.kind), box.level_g, box.litter_added_g,
                    box.box_measured_g, zero_g, box.zero_valid ? "" : " (unchecked)",
                    (int) box.absent);
-          id(still_stretch_1g).publish_state(box.longest_still_s[0]);
-          id(still_stretch_1_5g).publish_state(box.longest_still_s[1]);
-          id(still_stretch_2g).publish_state(box.longest_still_s[2]);
+          id(still_stretch).publish_state(box.longest_still_s);
 
           // Maintenance outranks the visit analysis: a bag that happens to
           // weigh what a cat does matches the cat by weight, but it went

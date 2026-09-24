@@ -26,19 +26,19 @@ forever. So a rise that stays inert for 30 s is litter, even if the bag
 happens to weigh exactly what your cat does.
 
 That 1 g is `top_up_still_sigma`, and it suits a quiet board. On a noisier
-one the reading never holds it for 30 s, and top-ups go unrecognised (they
-end on the inactivity timeout and count as a visit instead). The "Still
-Stretch" diagnostics record the longest stretch of every event under 1, 1.5
-and 2 g: look at them after a few days of visits and raise the limit to one
-your cats stay well short of 30 s at. The readings go through a median of
-three before this test, so a single glitched sample doesn't reset it.
+one the reading never holds it for 30 s, and top-ups go unrecognised: they
+end on the inactivity timeout and count as a visit instead. Raise it to a
+limit your cats stay well short of 30 s at; 1.5 g works on a board whose
+settled 1 s spread is about 0.55 g. The readings go through a median of three
+before this test, so a single glitched sample doesn't reset it.
 
-For a starting point, leave the box untouched and press `Measure Scale
-Noise`. After 2 minutes "Scale Noise Result" gives the board's typical 1 s
-spread and the smallest limit the box held for twice `top_up_settle_time`.
-That is the floor for still litter; the Still Stretch diagnostics show how
-far above your cats sit. Try a value with the `set_still_limit` action (no
-reflash needed); "Still Limit" shows the one in use.
+The limit in use is the "Still Limit" setting, which starts at
+`top_up_still_sigma`. For a starting point, leave the box untouched and press
+`Measure Scale Noise`. After 2 minutes "Scale Noise Result" gives the board's
+typical 1 s spread and the smallest limit the box held for twice
+`top_up_settle_time`: the floor for still litter. "Still Stretch" then shows,
+for every event, the longest stretch under the limit in use, so a few days of
+visits show how far below 30 s your cats stay.
 
 `BoxMonitor` in [state_analyzer.h](../state_analyzer.h) sees every sample,
 not just during events, because the interesting moments straddle event

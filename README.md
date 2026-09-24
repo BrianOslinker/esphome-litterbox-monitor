@@ -212,9 +212,9 @@ That's it — the monitor is ready to use.
   came back from a deep clean, to compare with the Empty Box Weight setting.
 - **Zero Drift:** Diagnostic; what the bare board read the last time the box
   was off, before the zero was corrected.
-- **Still Stretch 1 g / 1.5 g / 2 g:** Diagnostic; the longest stretch of the
-  last event that held still under each limit, in seconds. For tuning
-  `top_up_still_sigma` (see [Box Tracking](docs/BOX_TRACKING.md)).
+- **Still Stretch:** Diagnostic; the longest stretch of the last event that
+  held still under the Still Limit, in seconds. A cat visit should stay well
+  short of `top_up_settle_time`; a top-up reaches it.
 - **Scale Noise / Suggested Still Limit / Scale Noise Result:** Diagnostic;
   the outcome of the last `Measure Scale Noise` run.
 - **Raw/Unfiltered/Tared Weight:** Diagnostic weight readings.
@@ -230,6 +230,7 @@ That's it — the monitor is ready to use.
 - **Classification Threshold:** Standard deviation threshold (in grams) that separates urination from defecation. The default of 4 g works well out of the box; raise it if defecation events are being over-reported, lower it if they're being missed.  See [PoopSense](docs/POOPSENSE.md) for details.
 - **Calibration Known Weight:** Weight of calibration objects used during scale setup, in grams (1 g steps, up to 40 kg). Kept across reboots.
 - **Empty Box Weight:** Weight of the empty litterbox for improved litter remaining calculations. Also what deep-clean detection compares against; left at 0, deep cleans are not detected.
+- **Still Limit:** The 1 s spread (grams) under which the box counts as still for top-up detection. Starts at `top_up_still_sigma` (1 g); raise it on a noisier board. See [Box Tracking](docs/BOX_TRACKING.md).
 - **Full Litter Weight:** How much litter (in kg) a freshly filled box holds — what the "Litter Level" percentage counts as 100%. Left at 0, that sensor stays unavailable. A top-up or deep clean that fills past it raises it to match.
 
 ### Buttons
@@ -243,6 +244,8 @@ That's it — the monitor is ready to use.
 - **Reset Clean:** Resets tare, litter, waste, and visit counters.
 
   Only required if the automatic clean detection failed.
+- **Measure Scale Noise:** Leave the box untouched for 2 minutes; reports the
+  board's typical 1 s spread and suggests a Still Limit.
 - **Calibrate Scale:** Runs the two-step calibration: first press tares the
   bare board, second press (with the known weight on) sets the span.
   "Calibration Status" shows which one the next press runs; an unfinished tare
@@ -253,9 +256,6 @@ That's it — the monitor is ready to use.
 - `set_cat_weight`: Set a cat's weight manually via Home Assistant or API.
   - Parameters: `cat` (int, 1-5), `weight` (float, kg, 0-20; 0 clears the slot)
   - Example: To set Cat 1's weight to 5.2kg, call `set_cat_weight` with `cat=1`, `weight=5.2`.
-- `set_still_limit`: Set the top-up stillness limit without reflashing (see
-  [Box Tracking](docs/BOX_TRACKING.md)). Sticks across reboots.
-  - Parameters: `limit_g` (float, grams, 0.3-5)
 
 ### Synchronize Multiple Litterboxes
 
