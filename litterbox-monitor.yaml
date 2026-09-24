@@ -183,7 +183,6 @@ globals:
     initial_value: "0.0"
     restore_value: True
 
-
   # Last full calibration timestamp
   - id: calibration_timestamp
     type: time_t
@@ -750,15 +749,15 @@ sensor:
     icon: "mdi:emoticon-poop"
   - platform: template
     unit_of_measurement: kg
+    id: litter_weight
+    name: "Litter Remaining"
+    icon: "mdi:tray-full"
+    accuracy_decimals: 2
     # A few grams under zero is two readings of an empty box disagreeing,
     # not negative litter.
     filters:
       - clamp:
           min_value: 0
-    id: litter_weight
-    name: "Litter Remaining"
-    icon: "mdi:tray-full"
-    accuracy_decimals: 2
     on_value:
       - lambda: 'if (!std::isnan(x)) id(saved_litter_weight) = x;'
   # Litter remaining as a share of a full box.
@@ -1250,6 +1249,7 @@ button:
           auto call = id(litter_full_weight).make_call();
           call.set_value(roundf(kg * 10.0f) / 10.0f);  // the entity's 0.1 kg step
           call.perform();
+          ESP_LOGI("litter", "Full Litter Weight set to %.1f kg", roundf(kg * 10.0f) / 10.0f);
       - component.update: litter_level
   - platform: template
     name: "Reset Clean"
