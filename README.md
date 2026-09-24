@@ -258,6 +258,10 @@ That's it — the monitor is ready to use.
 - `set_cat_weight`: Set a cat's weight manually via Home Assistant or API.
   - Parameters: `cat` (int, 1-5), `weight` (float, kg, 0-20; 0 clears the slot)
   - Example: To set Cat 1's weight to 5.2kg, call `set_cat_weight` with `cat=1`, `weight=5.2`.
+- `set_lid_weight`: For a box with a lid that comes off to scoop or pour: its
+  weight, so taking it off isn't a scoop and putting it back isn't waste. Kept
+  across reboots. See [Box Tracking](docs/BOX_TRACKING.md#boxes-with-a-lid).
+  - Parameters: `weight_g` (float, grams, 0-2000; 0 = no lid, the default)
 
 ### Synchronize Multiple Litterboxes
 
