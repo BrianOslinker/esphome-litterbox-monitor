@@ -773,7 +773,7 @@ sensor:
     icon: "mdi:waveform"
     entity_category: diagnostic
     unit_of_measurement: "g"
-    accuracy_decimals: 1
+    accuracy_decimals: 2
     update_interval: never
   - platform: template
     name: "Visits since clean"
