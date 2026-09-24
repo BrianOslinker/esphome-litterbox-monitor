@@ -692,7 +692,7 @@ struct BoxEvent {
   bool zero_valid;
   bool absent;           // box not on the board at the end — do not tare
   bool scooped;          // top-up: litter came out before the bag went in
-  float longest_still_s;  // longest inert stretch during the event
+  float longest_still_s;  // longest inert stretch with something on the box
 };
 
 class BoxMonitor {
@@ -781,7 +781,9 @@ class BoxMonitor {
       close_plateau();
     }
     inert_len_ = sd < cfg_.inert_sigma_g ? inert_len_ + 1 : 0;
-    if (inert_len_ > inert_max_) inert_max_ = inert_len_;
+    // Only while something (a cat, poured litter) is on the box: the quiet
+    // after a cat has left, before the event closes, is the box, not the cat.
+    if (inert_len_ > inert_max_ && m - base_g_ >= cfg_.top_up_min_g) inert_max_ = inert_len_;
     if (probe_left_ > 0) {
       // Top bin for anything off the scale, NAN included.
       int bin = sd >= 0.0f && sd < PROBE_BINS * PROBE_BIN_G
