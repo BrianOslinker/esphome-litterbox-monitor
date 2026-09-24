@@ -187,6 +187,19 @@ globals:
     type: float # g
     initial_value: "NAN"
     restore_value: True
+  # Likewise the last visit's results, published only when a visit ends.
+  - id: saved_elimination_type
+    type: int # EliminationType, -1 until the first visit
+    initial_value: "-1"
+    restore_value: True
+  - id: saved_event_duration
+    type: float # s
+    initial_value: "NAN"
+    restore_value: True
+  - id: saved_elimination_std_dev
+    type: float # g
+    initial_value: "NAN"
+    restore_value: True
 
 esphome:
   name: litterbox
@@ -760,22 +773,28 @@ sensor:
       return timestamp == 0 ? NAN : timestamp;
   - platform: template
     id: event_duration_sensor
+    lambda: return id(saved_event_duration);
+    on_value:
+      - lambda: 'id(saved_event_duration) = x;'
     name: "Event Duration"
     icon: mdi:timer-outline
     device_class: duration
     state_class: measurement
     unit_of_measurement: "s"
     accuracy_decimals: 0
-    update_interval: never
+    update_interval: 60s
   - platform: template
     id: elimination_std_dev_sensor
+    lambda: return id(saved_elimination_std_dev);
+    on_value:
+      - lambda: 'id(saved_elimination_std_dev) = x;'
     name: "Elimination Std Dev"
     icon: mdi:chart-bell-curve
     entity_category: diagnostic
     state_class: measurement
     unit_of_measurement: "g"
     accuracy_decimals: 1
-    update_interval: never
+    update_interval: 60s
   - platform: wifi_signal
     id: wifi_signal_db
     name: "WiFi Signal"
@@ -791,9 +810,18 @@ sensor:
 text_sensor:
   - platform: template
     id: elimination_type_sensor
+    lambda: |-
+      int t = id(saved_elimination_type);
+      if (t < 0) return {};
+      return std::string(elimination_type_str(static_cast<EliminationType>(t)));
+    on_value:
+      - lambda: |-
+          for (int t = 0; t <= static_cast<int>(EliminationType::UNKNOWN); t++)
+            if (x == elimination_type_str(static_cast<EliminationType>(t)))
+              id(saved_elimination_type) = t;
     name: "Elimination Type"
     icon: "mdi:toilet"
-    update_interval: never
+    update_interval: 60s
   - platform: template
     id: state_machine_state
     name: "State Machine"
