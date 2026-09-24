@@ -1539,10 +1539,8 @@ script:
             }
             // A visit is a recognised cat, counted once: in the event that
             // recognised it, also when the timeout closed that with the cat
-            // still inside (the event after is it leaving). With no cat
-            // weight set there is nothing to recognise, so any event this
-            // long counts.
-            if (!continued && (cat_event || min_cat_kg == 0.0f)) {
+            // still inside (the event after is it leaving).
+            if (cat_event && !continued) {
               id(visits).publish_state(id(visits).state + 1);
             }
           }
