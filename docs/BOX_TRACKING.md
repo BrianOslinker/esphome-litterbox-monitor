@@ -81,7 +81,8 @@ back on lands in Waste Weight.
 Set the lid's weight with `set_lid_weight` (0, the default, is no lid). The
 lid comes off and goes back as one step of about that weight between steady
 levels, where a scoop comes out in small drops and litter pours in as a
-ramp, so a step within 50 g of it is the lid. Every level measured with the
+ramp, so a step within 10 % of it (the tolerance a cat is matched by, but
+at least 30 g) is the lid. Every level measured with the
 lid off is counted as if it were on, the lid's state carries over into the
 next event, and taking it off counts as opening the box, like lifting the
 box off (no minimum duration for a scoop). An empty box also counts for a
