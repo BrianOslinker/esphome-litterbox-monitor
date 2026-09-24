@@ -181,7 +181,7 @@ esphome:
       - script.execute: configure_box_monitor
       - text_sensor.template.publish:
           id: calibration_status
-          state: "Ready: next press tares (board empty)"
+          state: "Ready to tare"
       # The analyzer only runs inside an event, so its sensor would sit
       # unpublished until the first visit ended. With no event open it is
       # empty by definition, so say so rather than leaving it unknown.
@@ -1195,7 +1195,7 @@ script:
       - script.stop: calibration_tare_expiry
       - text_sensor.template.publish:
           id: calibration_status
-          state: "Taring: keep the board still"
+          state: "Taring…"
       - logger.log:
           level: INFO
           tag: calibration
@@ -1216,7 +1216,7 @@ script:
                 format: "Place the known weight and press Calibrate Scale again"
             - text_sensor.template.publish:
                 id: calibration_status
-                state: "Tared: add the known weight, then press again"
+                state: "Add weight, press again"
             - script.execute: calibration_tare_expiry
           else:
             - logger.log:
@@ -1229,7 +1229,7 @@ script:
                 value: "0.0"
             - text_sensor.template.publish:
                 id: calibration_status
-                state: "Tare failed (board moved): press again to retry"
+                state: "Tare failed – press to retry"
   - id: calibrate_weight
     parameters:
       known_weight_kg: float
@@ -1237,7 +1237,7 @@ script:
       - script.stop: calibration_tare_expiry
       - text_sensor.template.publish:
           id: calibration_status
-          state: "Measuring: keep the weight still"
+          state: "Measuring…"
       - logger.log:
           level: INFO
           tag: calibration
@@ -1268,7 +1268,7 @@ script:
                 ESP_LOGI("calibration", "New tare: %.2f, New coefficient: %.2f", id(calibration_tare), new_coefficient);
             - text_sensor.template.publish:
                 id: calibration_status
-                state: "Calibrated: next press starts over with a tare"
+                state: "Calibrated"
           else:
             - logger.log:
                 level: ERROR
@@ -1279,7 +1279,7 @@ script:
                 value: "0.0"
             - text_sensor.template.publish:
                 id: calibration_status
-                state: "Weight step failed (moved): press again to re-tare"
+                state: "Moved – press to re-tare"
   # A tare left waiting goes stale: the zero drifts, and a second press days
   # later would calibrate against it.
   - id: calibration_tare_expiry
@@ -1295,4 +1295,4 @@ script:
                 value: "0.0"
             - text_sensor.template.publish:
                 id: calibration_status
-                state: "Tare expired (15 min): press again to re-tare"
+                state: "Expired – press to re-tare"
