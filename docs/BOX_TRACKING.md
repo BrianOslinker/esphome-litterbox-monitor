@@ -44,7 +44,8 @@ When an event ends, before the tare moves, the first rule that fits wins:
 1. **Box still absent.** No verdict yet. Tare stays where it was.
 2. **Box came back empty** (within 150 g of Empty Box Weight, held 3 s)
    → `deep_clean`. Litter weight becomes whatever has gone in since, waste
-   and visits reset, deep-clean timer restarts.
+   and visits reset, deep-clean timer restarts, and Empty Box Weight is
+   updated to what the box just weighed.
 3. **Monitor lifted and set back** within 100 g of where it was → `lifted`.
 4. **Box off and back** between -20 g and +100 g of where it was → `lifted`.
 5. **Plateaus never drop** (by more than 50 g) from the lowest point of the
@@ -127,9 +128,10 @@ read "empty" before refilling keeps them apart.
 - Litter went in less than 3 s after the box was set down. The empty level
   has to hold for 3 s to register, and a pour starting before that erases
   it.
-- Empty Box Weight is stale. A washed box weighing a few grams more wet is
-  within the 150 g tolerance; a different box or a heavy new liner may not
-  be. Put the empty box on and press `Set Empty Box Weight`.
+- Empty Box Weight is stale. Each detected deep clean updates it, so small
+  changes (a wet box, a light liner) follow along, but a different box or a
+  heavy new liner can be more than 150 g off. Put the empty box on and press
+  `Set Empty Box Weight`.
 
 **Deep clean detected, timer didn't restart.** The clock wasn't synced at
 the time (the log says "Deep clean not stamped"). Counters still reset,

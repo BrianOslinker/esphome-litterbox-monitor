@@ -930,7 +930,8 @@ button:
           }
       - component.update: litter_life_left
       - component.update: deep_clean_due
-  # Weigh the empty box instead of typing its weight in.
+  # Weigh the empty box instead of typing its weight in. Each detected deep
+  # clean refines it afterwards (see end_event).
   - platform: template
     name: "Set Empty Box Weight"
     icon: "mdi:tray"
@@ -1136,10 +1137,17 @@ script:
           }
 
           switch (box.kind) {
-            case BoxEventKind::DEEP_CLEAN:
-              id(litter_weight).publish_state(level_kg - box_kg);
+            case BoxEventKind::DEEP_CLEAN: {
+              // The box just weighed itself empty, which beats the setting.
+              // Detection only fires within box_empty_tolerance of it, so
+              // this follows a wet box or a new liner without wandering off.
+              float measured_g = box.box_measured_g - zero_g;
+              auto call = id(litterbox_weight).make_call();
+              call.set_value(roundf(measured_g));
+              call.perform();
+              id(litter_weight).publish_state(level_kg - measured_g / 1000.0f);
               id(litter_added).publish_state(box.litter_added_g);
-              id(measured_box_weight).publish_state(box.box_measured_g - zero_g);
+              id(measured_box_weight).publish_state(measured_g);
               id(waste_weight).publish_state(0);
               id(visits).publish_state(0);
               // Unsynced clock reads as seconds-since-boot; stamping that
@@ -1152,6 +1160,7 @@ script:
                 ESP_LOGW("BOX", "Deep clean not stamped: clock not synced yet");
               }
               break;
+            }
             case BoxEventKind::TOP_UP:
               id(litter_weight).publish_state(level_kg - box_kg);
               id(litter_added).publish_state(box.litter_added_g);

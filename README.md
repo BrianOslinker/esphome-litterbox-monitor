@@ -144,7 +144,8 @@ YAML to match your wiring.
     monitor and press `Set Empty Box Weight` (or type its weight in grams into
     the number entity). This will improve the accuracy of the
     "Litter Remaining" sensor, and it is how a deep clean is recognised: the
-    box coming back within 150 g of this weight.
+    box coming back within 150 g of this weight. Each detected deep clean
+    then updates it to what the washed box actually weighed.
 
 7. Set the litterbox on top, add the litter and trigger the `Reset clean` button.
 
