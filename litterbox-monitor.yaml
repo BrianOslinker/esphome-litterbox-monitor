@@ -148,6 +148,12 @@ globals:
     initial_value: "0.0"
     restore_value: True
 
+  # Weight of a removable lid (set_lid_weight); 0 = no lid.
+  - id: lid_weight_g
+    type: float # g
+    initial_value: "0.0"
+    restore_value: True
+
   # Last full calibration timestamp
   - id: calibration_timestamp
     type: time_t
@@ -220,6 +226,20 @@ api:
               return;
             }
             id(cat_weights)[cat - 1] = weight;
+    # A box with a lid that comes off to scoop or pour: its weight, so taking
+    # it off isn't a scoop and putting it back isn't waste. 0 = no lid.
+    - service: set_lid_weight
+      variables:
+        weight_g: float
+      then:
+        - lambda: !lambda |-
+            if (!(weight_g >= 0.0f && weight_g <= 2000.0f)) {
+              ESP_LOGE("box", "Invalid lid weight %.0f g. Must be 0-2000 g (0 = no lid).", weight_g);
+              return;
+            }
+            id(lid_weight_g) = weight_g;
+            ESP_LOGI("box", "Lid weight set to %.0f g", weight_g);
+        - script.execute: configure_box_monitor
     - service: calibration_tare
       then:
         - script.execute: calibrate_tare
@@ -989,6 +1009,7 @@ script:
           cfg.scoop_min_g = -(${min_clean_event_weight});
           cfg.scoop_min_s = ${min_clean_event_duration};
           cfg.settle_s = ${top_up_settle_time};
+          cfg.lid_g = id(lid_weight_g);
           get_box_monitor().configure(cfg);
 
   # Start recording: activity just began, or the previous event closed while
@@ -1044,14 +1065,17 @@ script:
           // What happened to the box, judged on the absolute level. A
           // continued event is a cat leaving, never a scoop.
           const BoxEvent &box = get_box_monitor().finalize(duration, cat_event || continued);
+          // The lid going back on is not waste (nor a cat still inside), and
+          // taking it off is not a loss.
+          end_tared_kg -= box.lid_delta_g / 1000.0f;
           float zero_g = box.zero_valid ? box.zero_error_g : 0.0f;
           float zero_kg = zero_g / 1000.0f;
           float level_kg = (box.level_g - zero_g) / 1000.0f;
           float box_kg = id(litterbox_weight).state / 1000.0f;
-          ESP_LOGI("BOX", "Event: %s level=%.0fg added=%.0fg box=%.0fg zero=%.0fg%s absent=%d",
+          ESP_LOGI("BOX", "Event: %s level=%.0fg added=%.0fg box=%.0fg zero=%.0fg%s absent=%d lid=%s%+.0fg",
                    box_event_str(box.kind), box.level_g, box.litter_added_g,
                    box.box_measured_g, zero_g, box.zero_valid ? "" : " (unchecked)",
-                   (int) box.absent);
+                   (int) box.absent, box.lid_off ? "off" : "on", box.lid_delta_g);
 
           // Maintenance outranks the visit analysis: a bag that happens to
           // weigh what a cat does matches the cat by weight, but it went

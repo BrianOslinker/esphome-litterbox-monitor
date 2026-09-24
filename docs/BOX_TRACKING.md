@@ -69,6 +69,29 @@ reads is drift, and it gets folded into the calibration offset. Published as
 board more than 300 g from zero is left alone on the assumption something
 is wedged under it.
 
+### Boxes with a lid
+
+A top-entry box has a lid that comes off to scoop or pour. Without knowing
+it, the tracker reads the lid coming off as litter leaving: a top-up is
+measured from the lowest point, which is the box without its lid, so Litter
+Added comes out a lid too high and a scoop is reported alongside. And if the
+event ends while the lid is off, the scale tares there and the lid going
+back on lands in Waste Weight.
+
+Set the lid's weight with `set_lid_weight` (0, the default, is no lid). The
+lid comes off and goes back as one step of about that weight between steady
+levels, where a scoop comes out in small drops and litter pours in as a
+ramp, so a step within 50 g of it is the lid. Every level measured with the
+lid off is counted as if it were on, the lid's state carries over into the
+next event, and taking it off counts as opening the box, like lifting the
+box off (no minimum duration for a scoop). An empty box also counts for a
+deep clean with its lid on or off.
+
+The lid has to sit still, off or on, for about two seconds to be seen: a
+lid lifted and put straight back is just a wobble, which is harmless. Press
+it down the same way each time; how it sits moved the reading by up to 30 g
+on one box.
+
 All thresholds are substitutions at the top of the YAML:
 `box_off_tolerance`, `box_empty_tolerance`, `monitor_lift_threshold`,
 `lift_return_tolerance`, `min_top_up_weight`, `top_up_settle_time`, plus
