@@ -25,12 +25,15 @@ class FilterCompare {
       if (dev > SPIKE_G) spikes_++;
       if (dev > largest_) largest_ = dev;
     }
-    for (int v = 0; v < N; v++) var_[v].push(out[v], limit_for(v, limit_g), probing);
+    // Stretches count only while something is on the box, as in BoxMonitor.
+    bool loaded = raw_g - base_g_ >= LOADED_G;
+    for (int v = 0; v < N; v++) var_[v].push(out[v], limit_for(v, limit_g), probing, loaded);
     if (probing && var_[RAW].ready() && --probe_left_ == 0) finished_ = true;
   }
 
   /** With BoxMonitor::begin_event: the per-event stretches restart. */
-  void begin_event() {
+  void begin_event(float base_g) {
+    base_g_ = base_g;
     for (auto &v : var_) v.run = v.max = 0;
   }
 
@@ -81,6 +84,7 @@ class FilterCompare {
   static constexpr int HZ = 10;
   static constexpr int WINDOW = 10;
   static constexpr float SPIKE_G = 3.0f;
+  static constexpr float LOADED_G = 300.0f;  // min_top_up_weight
   static constexpr int LIMITS = 26;  // 0.5 .. 3.0 g
   static constexpr int BINS = 100;
   static constexpr float BIN_G = 0.05f;
@@ -100,12 +104,12 @@ class FilterCompare {
     float slice_maxes[MAX_SLICES] = {};
 
     bool ready() const { return win.size() >= WINDOW; }
-    void push(float x, float limit_g, bool probing) {
+    void push(float x, float limit_g, bool probing, bool loaded) {
       win.push(x);
       if (!ready()) return;
       float sd = sqrtf(win.variance());
       run = sd < limit_g ? run + 1 : 0;
-      if (run > max) max = run;
+      if (run > max && loaded) max = run;
       if (!probing) return;
       int bin = sd >= 0.0f && sd < BINS * BIN_G ? static_cast<int>(sd / BIN_G) : BINS - 1;
       hist[bin]++;
@@ -171,6 +175,7 @@ class FilterCompare {
   float last_[5] = {};
   int have_ = 0;
   float ref_[N] = {NAN, NAN, NAN, NAN, NAN};
+  float base_g_ = 0.0f;
   int probe_left_ = 0, probe_total_ = 0, spikes_ = 0;
   bool finished_ = false;
   float largest_ = 0.0f;
