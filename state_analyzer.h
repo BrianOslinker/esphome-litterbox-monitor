@@ -707,7 +707,11 @@ struct BoxEvent {
 
 class BoxMonitor {
  public:
-  void configure(const BoxConfig &c) { cfg_ = c; }
+  void configure(const BoxConfig &c) {
+    cfg_ = c;
+    // No lid (any more): nothing can be off, and nothing carries over.
+    if (cfg_.lid_g <= 0.0f) lid_off_ = pl_lid_off_ = ev_lid_off_ = lid_opened_ = false;
+  }
 
   /** `base_g`: absolute level the event is measured against (the last tare). */
   void begin_event(float base_g) {

@@ -1386,7 +1386,8 @@ script:
           cfg.scoop_min_s = ${min_clean_event_duration};
           cfg.settle_s = ${top_up_settle_time};
           cfg.inert_sigma_g = id(still_limit).state;
-          cfg.lid_g = id(lid_weight).state;
+          float lid_g = id(lid_weight).state;
+          cfg.lid_g = std::isnan(lid_g) ? 0.0f : lid_g;
           get_box_monitor().configure(cfg);
 
   # Start recording: activity just began, or the previous event closed while

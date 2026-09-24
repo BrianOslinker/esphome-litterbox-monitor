@@ -102,15 +102,16 @@ event ends while the lid is off, the scale tares there and the lid going
 back on lands in Waste Weight.
 
 Set the lid's weight in Lid Weight, next to Empty Box Weight (0, the
-default, is no lid). The lid comes off and goes back as one step of about
-that weight between steady levels, where a scoop comes out in small drops
-and litter pours in as a ramp, so a step within `lid_tolerance` (30 g) of it
-is the lid. A lid's weight doesn't change the way a cat's does, so the
-window is fixed, like the empty box's, rather than a share of it. Every
-level measured with the lid off is counted as if it were on, the lid's state
-carries over into the next event, and taking it off counts as opening the
-box, like lifting the box off (no minimum duration for a scoop). An empty
-box also counts for a deep clean with its lid on or off.
+default, is no lid). Empty Box Weight is then the box with its lid on. The
+lid comes off and goes back as one step of about that weight between steady
+levels, where a scoop comes out in small drops and litter pours in as a
+ramp, so a step within `lid_tolerance` (30 g) of it is the lid. A lid's
+weight doesn't change the way a cat's does, so the window is fixed, like the
+empty box's, rather than a share of it. Every level measured with the lid
+off is counted as if it were on, the lid's state carries over into the next
+event, and taking it off counts as opening the box, like lifting the box off
+(no minimum duration for a scoop). An empty box also counts for a deep clean
+with its lid on or off.
 
 The lid has to sit still, off or on, for about two seconds to be seen: a
 lid lifted and put straight back is just a wobble, which is harmless. Keep

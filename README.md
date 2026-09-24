@@ -236,7 +236,7 @@ That's it — the monitor is ready to use.
 - **Calibration Known Weight:** Weight of calibration objects used during scale setup, in grams (1 g steps, up to 40 kg). Kept across reboots.
 - **Empty Box Weight:** Weight of the empty litterbox for improved litter remaining calculations. Also what deep-clean detection compares against; left at 0, deep cleans are not detected.
 - **Still Limit:** The 1 s spread (grams) under which the box counts as still for top-up detection. Starts at `top_up_still_sigma` (1 g); raise it on a noisier board. See [Box Tracking](docs/BOX_TRACKING.md).
-- **Lid Weight:** For a box with a lid that comes off to scoop or pour: its weight, so taking it off isn't a scoop and putting it back isn't waste. Left at 0 (no lid), nothing changes. See [Box Tracking](docs/BOX_TRACKING.md#boxes-with-a-lid).
+- **Lid Weight:** For a box with a lid that comes off to scoop or pour: its weight, so taking it off isn't a scoop and putting it back isn't waste. Empty Box Weight is then the box with its lid on. Left at 0 (no lid), nothing changes. See [Box Tracking](docs/BOX_TRACKING.md#boxes-with-a-lid).
 - **Full Litter Weight:** How much litter (in kg) a freshly filled box holds — what the "Litter Level" percentage counts as 100%. Left at 0, that sensor stays unavailable. A top-up or deep clean that fills past it raises it to match.
 
 ### Buttons
