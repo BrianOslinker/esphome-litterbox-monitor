@@ -210,8 +210,9 @@ That's it — the monitor is ready to use.
 - **Zero Drift:** Diagnostic; what the bare board read the last time the box
   was off, before the zero was corrected.
 - **Still Stretch:** Diagnostic; the longest stretch of the last event that
-  held still under the Still Limit, in seconds. A cat visit should stay well
-  short of `top_up_settle_time`; a top-up reaches it.
+  held still under the Still Limit while something was on the box (a cat, or
+  poured litter), in seconds. A cat visit should stay well short of
+  `top_up_settle_time`; a top-up reaches it.
 - **Scale Noise / Minimum Still Limit / Scale Noise Test:** Diagnostic; from
   the last `Measure Scale Noise` run: the typical 1 s spread, the Still Limit
   the untouched box needs to hold still for `top_up_settle_time`, and the

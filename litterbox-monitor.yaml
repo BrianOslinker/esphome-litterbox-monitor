@@ -747,7 +747,8 @@ sensor:
     update_interval: never
     disabled_by_default: True
   # Longest stretch of the last event that held still (1 s σ) under the
-  # Still Limit: a cat should stay well short of top_up_settle_time.
+  # Still Limit while something was on the box (min_top_up_weight or more):
+  # a cat should stay well short of top_up_settle_time.
   - platform: template
     id: still_stretch
     name: "Still Stretch"
