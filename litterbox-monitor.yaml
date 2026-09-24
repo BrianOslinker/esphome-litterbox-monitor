@@ -527,13 +527,11 @@ sensor:
             id(scale_noise_test).publish_state("Moved – press to retry");
           }
           if (bm.take_noise_probe_result()) {
-            const int need_s = 2 * ${top_up_settle_time};
-            float med_g = bm.noise_probe_median_g();
-            float lim_g = bm.noise_probe_limit_g(need_s);
-            id(scale_noise).publish_state(med_g);
-            id(min_still_limit).publish_state(lim_g);
-            // Never held need_s under the largest candidate (3 g).
-            id(scale_noise_test).publish_state(std::isnan(lim_g) ? "Too noisy – check wiring" : "Done");
+            float min_g = bm.noise_probe_min_limit_g();
+            id(scale_noise).publish_state(bm.noise_probe_median_g());
+            id(min_still_limit).publish_state(min_g);
+            // Over 3 g with nothing on the box points at the wiring or power.
+            id(scale_noise_test).publish_state(min_g > 3.0f ? "Too noisy – check wiring" : "Done");
           }
           // Publish once at startup as well as on change: the tracker starts in
           // NORMAL, so a box that is simply sitting there never trips an edge
@@ -726,7 +724,7 @@ sensor:
     accuracy_decimals: 1
     update_interval: never
   # From the last Measure Scale Noise run: the typical 1 s spread, and the
-  # smallest limit the untouched box held for twice top_up_settle_time.
+  # limit the untouched box needs to hold still for top_up_settle_time.
   - platform: template
     id: scale_noise
     name: "Scale Noise"
@@ -1029,7 +1027,7 @@ button:
           id(waste_weight).publish_state(0);
           id(visits).publish_state(0);
           id(litter_weight).publish_state(id(hx711_raw_value).state - (id(litterbox_weight).state/1000.0));
-  # Leave the box untouched for 2 minutes: measures how still this board
+  # Leave the box untouched for 5 minutes: measures how still this board
   # reads (see Scale Noise and Minimum Still Limit).
   - platform: template
     name: "Measure Scale Noise"
@@ -1037,8 +1035,8 @@ button:
     entity_category: config
     on_press:
       - lambda: !lambda |-
-          get_box_monitor().start_noise_probe(120 * 10);
-          id(scale_noise_test).publish_state("Measuring… (2 min, hands off)");
+          get_box_monitor().start_noise_probe(300 * 10);
+          id(scale_noise_test).publish_state("Measuring… (5 min, hands off)");
   - platform: template
     name: "Calibrate Scale"
     icon: mdi:scale-bathroom
