@@ -677,6 +677,10 @@ struct BoxConfig {
   float scoop_min_g;   // drop (positive number) that counts as a scoop
   int scoop_min_s;     // ...unless the event is at least this long
   int settle_s;        // inert seconds before a top-up ends the event
+  // 1 s spread below which the box is inert: nothing alive on it. Over 1552
+  // verified visits the longest a cat held a 1 s window under 1 g was 11 s;
+  // poured litter holds it forever. A noisier board needs a higher limit.
+  float inert_sigma_g = 1.0f;
 };
 
 struct BoxEvent {
@@ -729,7 +733,7 @@ class BoxMonitor {
     } else if (pl_n_ > 0) {
       close_plateau();
     }
-    inert_len_ = sd < INERT_SIGMA ? inert_len_ + 1 : 0;
+    inert_len_ = sd < cfg_.inert_sigma_g ? inert_len_ + 1 : 0;
 
     // Box state. Absence latches until a stable plateau with something in
     // the box shows up again, so "off in one event, back in the next" works.
@@ -864,11 +868,6 @@ class BoxMonitor {
   static constexpr int WINDOW = 10;
   /** Same bar as the analyzer's stability: sqrt(250). */
   static constexpr float PLATEAU_SIGMA = 15.811388f;
-  /**
-   * Inert: nothing alive on the box. Over 1552 verified visits the longest a
-   * cat held a 1 s window under 1 g was 11 s; poured litter holds it forever.
-   */
-  static constexpr float INERT_SIGMA = 1.0f;
   static constexpr int MIN_PLATEAU = 2 * HZ;
   static constexpr int HOLD = 3 * HZ;
   /**

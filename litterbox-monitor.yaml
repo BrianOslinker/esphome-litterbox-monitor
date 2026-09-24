@@ -70,10 +70,17 @@ substitutions:
   # Smallest rise reported as a litter top-up.
   min_top_up_weight: "300" # g
 
-  # Mass that sits this long without a wobble (1 s σ < 1 g) is litter, not a
-  # cat, whatever it weighs: the stillest cat on record managed 11 s. Ends a
-  # top-up early and is what a rise must do to count as one.
+  # Mass that sits this long without a wobble (1 s σ under
+  # top_up_still_sigma) is litter, not a cat, whatever it weighs: the stillest
+  # cat on record managed 11 s. Ends a top-up early and is what a rise must do
+  # to count as one.
   top_up_settle_time: "30" # seconds
+
+  # The wobble limit for the above. 1 g suits a quiet board; on a noisier one
+  # the reading never holds it for top_up_settle_time, and top-ups end on the
+  # inactivity timeout as visits instead. Raise it to a limit your cats stay
+  # well short of top_up_settle_time at.
+  top_up_still_sigma: "1.0" # g
 
 globals:
   ## General state
@@ -503,7 +510,16 @@ sensor:
           BoxMonitor &bm = get_box_monitor();
           static BoxState prev_box = BoxState::NORMAL;
           static bool box_published = false;
-          bm.process(x * 1000.0f);
+          // Median of the last three readings: one glitched sample would
+          // otherwise reset the stillness count, for 100 ms of delay.
+          static float d1 = NAN, d2 = NAN;
+          float g = x * 1000.0f;
+          float med = g;
+          if (!std::isnan(d1) && !std::isnan(d2))
+            med = std::max(std::min(g, d1), std::min(std::max(g, d1), d2));
+          d2 = d1;
+          d1 = g;
+          bm.process(med);
           // Publish once at startup as well as on change: the tracker starts in
           // NORMAL, so a box that is simply sitting there never trips an edge
           // and the sensor would stay unpublished until the first lift. Wait
@@ -995,6 +1011,7 @@ script:
           cfg.scoop_min_g = -(${min_clean_event_weight});
           cfg.scoop_min_s = ${min_clean_event_duration};
           cfg.settle_s = ${top_up_settle_time};
+          cfg.inert_sigma_g = ${top_up_still_sigma};
           get_box_monitor().configure(cfg);
 
   # Start recording: activity just began, or the previous event closed while
