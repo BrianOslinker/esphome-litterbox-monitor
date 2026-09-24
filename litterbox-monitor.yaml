@@ -263,6 +263,10 @@ esp32:
 logger:
   level: DEBUG
 
+# Reset reason, heap and loop time: what explains a restart.
+debug:
+  update_interval: 60s
+
 api:
   encryption:
     key: !secret litterbox_api_key
@@ -957,8 +961,21 @@ sensor:
     id: uptime_sensor
     name: "Uptime"
     disabled_by_default: True
+  # A shrinking minimum points at a leak; a long loop at something blocking.
+  - platform: debug
+    free:
+      name: "Heap Free"
+    min_free:
+      name: "Heap Min Free"
+    loop_time:
+      name: "Loop Time"
 
 text_sensor:
+  # Why the monitor last booted: power on, brownout, software, watchdog,
+  # panic. A crash's backtrace also shows in the log on the first connect.
+  - platform: debug
+    reset_reason:
+      name: "Reset Reason"
   - platform: template
     id: elimination_type_sensor
     lambda: |-
