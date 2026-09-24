@@ -749,7 +749,7 @@ class BoxMonitor {
   /**
    * The limit the untouched box needs to hold still for settle_s: the largest
    * 1 s spread of a typical slice that long (the median over the probe's
-   * slices), rounded up to 0.1 g. Steadier from run to run than asking for
+   * slices). Steadier from run to run than asking for
    * one unbroken stretch, which a single jolt can break. NAN if the probe was
    * shorter than one slice.
    */
@@ -759,8 +759,7 @@ class BoxMonitor {
     std::copy(probe_maxes_, probe_maxes_ + probe_slices_, s);
     std::sort(s, s + probe_slices_);
     int k = probe_slices_ / 2;
-    float m = probe_slices_ % 2 ? s[k] : 0.5f * (s[k - 1] + s[k]);
-    return ceilf(m * 10.0f - 0.001f) / 10.0f;
+    return probe_slices_ % 2 ? s[k] : 0.5f * (s[k - 1] + s[k]);
   }
 
   /** Every sample, in absolute grams, event or not. */
