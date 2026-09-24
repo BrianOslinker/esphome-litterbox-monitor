@@ -212,8 +212,10 @@ That's it — the monitor is ready to use.
 - **Still Stretch:** Diagnostic; the longest stretch of the last event that
   held still under the Still Limit, in seconds. A cat visit should stay well
   short of `top_up_settle_time`; a top-up reaches it.
-- **Scale Noise / Suggested Still Limit / Scale Noise Result:** Diagnostic;
-  the outcome of the last `Measure Scale Noise` run.
+- **Scale Noise / Minimum Still Limit / Scale Noise Test:** Diagnostic; from
+  the last `Measure Scale Noise` run: the typical 1 s spread, the smallest
+  Still Limit the untouched box held for twice `top_up_settle_time`, and the
+  run's progress or outcome.
 - **Raw/Unfiltered/Tared Weight:** Diagnostic weight readings.
 - **Analog sensor value:** Diagnostic (disabled by default); the raw HX711
   count before calibration is applied.
@@ -235,8 +237,8 @@ That's it — the monitor is ready to use.
 - **Reset Clean:** Resets tare, litter, waste, and visit counters.
 
   Only required if the automatic clean detection failed.
-- **Measure Scale Noise:** Leave the box untouched for 2 minutes; reports the
-  board's typical 1 s spread and suggests a Still Limit.
+- **Measure Scale Noise:** Leave the box untouched for 2 minutes; measures the
+  board's typical 1 s spread and the minimum Still Limit it holds.
 - **Calibrate Scale:** Runs the two-step calibration: first press tares the
   bare board, second press (with the known weight on) sets the span. See
   [Calibration](#calibration).

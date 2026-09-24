@@ -34,9 +34,11 @@ before this test, so a single glitched sample doesn't reset it.
 
 The limit in use is the "Still Limit" setting, which starts at
 `top_up_still_sigma`. For a starting point, leave the box untouched and press
-`Measure Scale Noise`. After 2 minutes "Scale Noise Result" gives the board's
-typical 1 s spread and the smallest limit the box held for twice
-`top_up_settle_time`: the floor for still litter. "Still Stretch" then shows,
+`Measure Scale Noise`. After 2 minutes "Scale Noise" gives the board's
+typical 1 s spread, and "Minimum Still Limit" the smallest limit the box held
+for twice `top_up_settle_time`. That is a floor, not the value to use: litter
+that has just been poured is still settling and reads noisier (one board
+measured 1.1 g but needed 1.5 g to catch its top-ups). "Still Stretch" then shows,
 for every event, the longest stretch under the limit in use, so a few days of
 visits show how far below 30 s your cats stay.
 

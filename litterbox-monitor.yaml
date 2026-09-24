@@ -524,23 +524,16 @@ sensor:
           bm.process(med);
           if (bm.noise_probe_running() && id(vibration_detected).state) {
             bm.cancel_noise_probe();
-            id(scale_noise_result).publish_state("Cancelled: the box moved. Press again and leave it untouched");
+            id(scale_noise_test).publish_state("Moved – press to retry");
           }
           if (bm.take_noise_probe_result()) {
             const int need_s = 2 * ${top_up_settle_time};
             float med_g = bm.noise_probe_median_g();
             float lim_g = bm.noise_probe_limit_g(need_s);
             id(scale_noise).publish_state(med_g);
-            id(suggested_still_limit).publish_state(lim_g);
-            char msg[128];
-            if (std::isnan(lim_g)) {
-              snprintf(msg, sizeof msg, "Typical spread %.2f g; never held %d s under 3 g: check wiring and power",
-                       med_g, need_s);
-            } else {
-              snprintf(msg, sizeof msg, "Typical spread %.2f g; suggested still limit %.1f g (now %.1f g)",
-                       med_g, lim_g, id(still_limit).state);
-            }
-            id(scale_noise_result).publish_state(msg);
+            id(min_still_limit).publish_state(lim_g);
+            // Never held need_s under the largest candidate (3 g).
+            id(scale_noise_test).publish_state(std::isnan(lim_g) ? "Too noisy – check wiring" : "Done");
           }
           // Publish once at startup as well as on change: the tracker starts in
           // NORMAL, so a box that is simply sitting there never trips an edge
@@ -743,8 +736,8 @@ sensor:
     accuracy_decimals: 2
     update_interval: never
   - platform: template
-    id: suggested_still_limit
-    name: "Suggested Still Limit"
+    id: min_still_limit
+    name: "Minimum Still Limit"
     icon: "mdi:waveform"
     entity_category: diagnostic
     unit_of_measurement: "g"
@@ -843,10 +836,10 @@ text_sensor:
     icon: "mdi:state-machine"
     entity_category: diagnostic
     update_interval: never
-  # Outcome of the last Measure Scale Noise run.
+  # Progress and outcome of Measure Scale Noise.
   - platform: template
-    id: scale_noise_result
-    name: "Scale Noise Result"
+    id: scale_noise_test
+    name: "Scale Noise Test"
     icon: "mdi:waveform"
     entity_category: diagnostic
     update_interval: never
@@ -1037,7 +1030,7 @@ button:
           id(visits).publish_state(0);
           id(litter_weight).publish_state(id(hx711_raw_value).state - (id(litterbox_weight).state/1000.0));
   # Leave the box untouched for 2 minutes: measures how still this board
-  # reads and suggests a Still Limit (see Scale Noise Result).
+  # reads (see Scale Noise and Minimum Still Limit).
   - platform: template
     name: "Measure Scale Noise"
     icon: "mdi:waveform"
@@ -1045,7 +1038,7 @@ button:
     on_press:
       - lambda: !lambda |-
           get_box_monitor().start_noise_probe(120 * 10);
-          id(scale_noise_result).publish_state("Measuring: leave the box untouched for 2 min");
+          id(scale_noise_test).publish_state("Measuring… (2 min, hands off)");
   - platform: template
     name: "Calibrate Scale"
     icon: mdi:scale-bathroom
