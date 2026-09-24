@@ -188,6 +188,7 @@ esphome:
   comment: Smart Litterbox
   includes:
     - state_analyzer.h
+    - filter_compare.h  # local only, temporary
   project:
     name: "CristianChelu.LitterboxMonitor"
     version: "esp32.hx711"
@@ -522,8 +523,10 @@ sensor:
           d2 = d1;
           d1 = g;
           bm.process(med);
+          get_filter_compare().process(g, med, id(still_limit).state);  // local only
           if (bm.noise_probe_running() && id(vibration_detected).state) {
             bm.cancel_noise_probe();
+            get_filter_compare().cancel_probe();  // local only
             id(scale_noise_test).publish_state("Moved – press to retry");
           }
           if (bm.take_noise_probe_result()) {
@@ -532,6 +535,12 @@ sensor:
             float lim_g = bm.noise_probe_limit_g(need_s);
             id(scale_noise).publish_state(med_g);
             id(min_still_limit).publish_state(lim_g);
+            // Local only: the same test on the unfiltered readings.
+            FilterCompare &fc = get_filter_compare();
+            id(unfiltered_scale_noise).publish_state(fc.probe_median_g());
+            id(unfiltered_min_still_limit).publish_state(fc.probe_limit_g(need_s));
+            id(noise_test_spikes).publish_state(fc.spikes());
+            id(noise_test_largest_spike).publish_state(fc.largest_spike_g());
             // Never held need_s under the largest candidate (3 g).
             id(scale_noise_test).publish_state(std::isnan(lim_g) ? "Too noisy – check wiring" : "Done");
           }
@@ -741,6 +750,58 @@ sensor:
     icon: "mdi:waveform"
     entity_category: diagnostic
     unit_of_measurement: "g"
+    accuracy_decimals: 1
+    update_interval: never
+  # Local only, temporary (filter_compare.h): the stillness tests on the
+  # unfiltered readings, to judge the median of three.
+  - platform: template
+    id: unfiltered_scale_noise
+    name: "Unfiltered Scale Noise"
+    icon: "mdi:waveform"
+    entity_category: diagnostic
+    unit_of_measurement: "g"
+    accuracy_decimals: 2
+    update_interval: never
+  - platform: template
+    id: unfiltered_min_still_limit
+    name: "Unfiltered Minimum Still Limit"
+    icon: "mdi:waveform"
+    entity_category: diagnostic
+    unit_of_measurement: "g"
+    accuracy_decimals: 1
+    update_interval: never
+  # Readings more than 3 g from the median of three, in the last noise test.
+  - platform: template
+    id: noise_test_spikes
+    name: "Noise Test Spikes"
+    icon: "mdi:flash-alert"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: never
+  - platform: template
+    id: noise_test_largest_spike
+    name: "Noise Test Largest Spike"
+    icon: "mdi:flash-alert"
+    entity_category: diagnostic
+    unit_of_measurement: "g"
+    accuracy_decimals: 1
+    update_interval: never
+  - platform: template
+    id: unfiltered_still_stretch
+    name: "Unfiltered Still Stretch"
+    icon: "mdi:timer-sand"
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: never
+  - platform: template
+    id: unfiltered_still_stretch_plus
+    name: "Unfiltered Still Stretch +0.5 g"
+    icon: "mdi:timer-sand"
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    state_class: measurement
     accuracy_decimals: 1
     update_interval: never
   - platform: template
@@ -1038,6 +1099,7 @@ button:
     on_press:
       - lambda: !lambda |-
           get_box_monitor().start_noise_probe(120 * 10);
+          get_filter_compare().start_probe(120 * 10);  // local only
           id(scale_noise_test).publish_state("Measuring… (2 min, hands off)");
   - platform: template
     name: "Calibrate Scale"
@@ -1105,6 +1167,7 @@ script:
           get_analyzer().attach_buffer(&get_weight_buf());
           get_sample_idx() = 0;
           get_box_monitor().begin_event((id(tare_value) + id(auto_tare_value)) * 1000.0f);
+          get_filter_compare().begin_event();  // local only
           ESP_LOGD("SA", "Event start, analyzer reset");
 
   # Close the event: score the visit, work out what happened to the box,
@@ -1154,6 +1217,8 @@ script:
                    box.box_measured_g, zero_g, box.zero_valid ? "" : " (unchecked)",
                    (int) box.absent);
           id(still_stretch).publish_state(box.longest_still_s);
+          id(unfiltered_still_stretch).publish_state(get_filter_compare().longest_still_s());  // local only
+          id(unfiltered_still_stretch_plus).publish_state(get_filter_compare().longest_still_plus_s());
 
           // Maintenance outranks the visit analysis: a bag that happens to
           // weigh what a cat does matches the cat by weight, but it went
