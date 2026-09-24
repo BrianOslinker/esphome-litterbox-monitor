@@ -220,6 +220,7 @@ That's it — the monitor is ready to use.
 - **Classification Threshold:** Standard deviation threshold (in grams) that separates urination from defecation. The default of 4 g works well out of the box; raise it if defecation events are being over-reported, lower it if they're being missed.  See [PoopSense](docs/POOPSENSE.md) for details.
 - **Calibration Known Weight:** Weight of calibration objects used during scale setup, in grams (1 g steps, up to 40 kg). Kept across reboots.
 - **Empty Box Weight:** Weight of the empty litterbox for improved litter remaining calculations. Also what deep-clean detection compares against; left at 0, deep cleans are not detected.
+- **Lid Weight:** For a box with a lid that comes off to scoop or pour: its weight, so taking it off isn't a scoop and putting it back isn't waste. Left at 0 (no lid), nothing changes. See [Box Tracking](docs/BOX_TRACKING.md#boxes-with-a-lid).
 - **Full Litter Weight:** How much litter (in kg) a freshly filled box holds — what the "Litter Level" percentage counts as 100%. Left at 0, that sensor stays unavailable.
 
 ### Buttons
@@ -237,10 +238,6 @@ That's it — the monitor is ready to use.
 - `set_cat_weight`: Set a cat's weight manually via Home Assistant or API.
   - Parameters: `cat` (int, 1-5), `weight` (float, kg, 0-20; 0 clears the slot)
   - Example: To set Cat 1's weight to 5.2kg, call `set_cat_weight` with `cat=1`, `weight=5.2`.
-- `set_lid_weight`: For a box with a lid that comes off to scoop or pour: its
-  weight, so taking it off isn't a scoop and putting it back isn't waste. Kept
-  across reboots. See [Box Tracking](docs/BOX_TRACKING.md#boxes-with-a-lid).
-  - Parameters: `weight_g` (float, grams, 0-2000; 0 = no lid, the default)
 
 ### Synchronize Multiple Litterboxes
 
