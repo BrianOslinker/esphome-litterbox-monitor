@@ -719,14 +719,15 @@ class BoxMonitor {
 
   /**
    * Scale noise probe: for `samples` readings (box left untouched) record the
-   * 1 s spread, and how long it stayed under each candidate limit from 1.0 to
-   * 3.0 g, to size inert_sigma_g for this board.
+   * 1 s spread, and its largest value in each settle_s slice, to size
+   * inert_sigma_g for this board.
    */
   void start_noise_probe(int samples) {
     probe_left_ = probe_total_ = samples;
     probe_finished_ = false;
     for (auto &b : probe_hist_) b = 0;
-    for (int i = 0; i < PROBE_LIMITS; i++) probe_run_[i] = probe_best_[i] = 0;
+    probe_slices_ = probe_slice_n_ = 0;
+    probe_slice_max_ = 0.0f;
   }
   void cancel_noise_probe() { probe_left_ = 0; }
   bool noise_probe_running() const { return probe_left_ > 0; }
@@ -745,11 +746,21 @@ class BoxMonitor {
     }
     return NAN;
   }
-  /** Smallest candidate limit the last probe held for `need_s` straight, or NAN. */
-  float noise_probe_limit_g(int need_s) const {
-    for (int i = 0; i < PROBE_LIMITS; i++)
-      if (probe_best_[i] >= need_s * HZ) return probe_limit_g(i);
-    return NAN;
+  /**
+   * The limit the untouched box needs to hold still for settle_s: the largest
+   * 1 s spread of a typical slice that long (the median over the probe's
+   * slices), rounded up to 0.1 g. Steadier from run to run than asking for
+   * one unbroken stretch, which a single jolt can break. NAN if the probe was
+   * shorter than one slice.
+   */
+  float noise_probe_min_limit_g() const {
+    if (probe_slices_ == 0) return NAN;
+    float s[PROBE_MAX_SLICES];
+    std::copy(probe_maxes_, probe_maxes_ + probe_slices_, s);
+    std::sort(s, s + probe_slices_);
+    int k = probe_slices_ / 2;
+    float m = probe_slices_ % 2 ? s[k] : 0.5f * (s[k - 1] + s[k]);
+    return ceilf(m * 10.0f - 0.001f) / 10.0f;
   }
 
   /** Every sample, in absolute grams, event or not. */
@@ -777,9 +788,11 @@ class BoxMonitor {
       int bin = sd >= 0.0f && sd < PROBE_BINS * PROBE_BIN_G
                     ? static_cast<int>(sd / PROBE_BIN_G) : PROBE_BINS - 1;
       probe_hist_[bin]++;
-      for (int i = 0; i < PROBE_LIMITS; i++) {
-        probe_run_[i] = sd < probe_limit_g(i) ? probe_run_[i] + 1 : 0;
-        if (probe_run_[i] > probe_best_[i]) probe_best_[i] = probe_run_[i];
+      if (!(sd <= probe_slice_max_)) probe_slice_max_ = sd;
+      if (++probe_slice_n_ >= std::max(1, cfg_.settle_s) * HZ) {
+        if (probe_slices_ < PROBE_MAX_SLICES) probe_maxes_[probe_slices_++] = probe_slice_max_;
+        probe_slice_max_ = 0.0f;
+        probe_slice_n_ = 0;
       }
       if (--probe_left_ == 0) probe_finished_ = true;
     }
@@ -918,11 +931,10 @@ class BoxMonitor {
   static constexpr int WINDOW = 10;
   /** Same bar as the analyzer's stability: sqrt(250). */
   static constexpr float PLATEAU_SIGMA = 15.811388f;
-  /** Noise probe: candidate limits 1.0..3.0 g in 0.1 g, spread histogram 0..5 g. */
-  static constexpr int PROBE_LIMITS = 21;
+  /** Noise probe: spread histogram 0..5 g, up to 20 slices (10 min at 30 s). */
   static constexpr int PROBE_BINS = 100;
   static constexpr float PROBE_BIN_G = 0.05f;
-  static float probe_limit_g(int i) { return 1.0f + 0.1f * i; }
+  static constexpr int PROBE_MAX_SLICES = 20;
   static constexpr int MIN_PLATEAU = 2 * HZ;
   static constexpr int HOLD = 3 * HZ;
   /**
@@ -943,8 +955,10 @@ class BoxMonitor {
   int probe_total_ = 0;
   bool probe_finished_ = false;
   uint16_t probe_hist_[PROBE_BINS] = {};
-  uint16_t probe_run_[PROBE_LIMITS] = {};
-  uint16_t probe_best_[PROBE_LIMITS] = {};
+  int probe_slices_ = 0;
+  int probe_slice_n_ = 0;
+  float probe_slice_max_ = 0.0f;
+  float probe_maxes_[PROBE_MAX_SLICES] = {};
   // open plateau (Welford, double: sums of 1e4 g over 1e4 samples lose float bits)
   int pl_start_ = 0;
   int pl_n_ = 0;
