@@ -1075,14 +1075,17 @@ script:
                 elimination_type_str(result.elimination_type));
             id(event_duration_sensor).publish_state(duration);
 
-            // Publish std dev of the single elimination period
+            // Std dev of the first elimination period, or unknown without
+            // one: the previous visit's value would pass for this one's.
+            float std_dev = NAN;
             for (int i = 0; i < result.period_count; i++) {
               if (result.periods[i].state == AnalyzerState::ELIMINATING &&
                   result.periods[i].std_dev >= 0.0f) {
-                id(elimination_std_dev_sensor).publish_state(result.periods[i].std_dev);
+                std_dev = result.periods[i].std_dev;
                 break;
               }
             }
+            id(elimination_std_dev_sensor).publish_state(std_dev);
 
             if (cat_event) {
               int ci = result.detected_cat;
