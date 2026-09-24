@@ -964,10 +964,10 @@ class BoxMonitor {
   static constexpr float LEVEL_TOL = 50.0f;
   /**
    * A step within LID_TOL_FRAC of lid_g is the lid, the same 10 % a cat is
-   * matched by, but never tighter than LID_TOL_MIN_G: how a lid sits moves
-   * its reading by up to ~30 g whatever it weighs (477-529 g steps for a
-   * 505 g lid). Coming off, the first plateau may already have a scoopful
-   * out, so up to LID_SCOOP_G more is accepted.
+   * matched by, but never tighter than LID_TOL_MIN_G: a lid catching on a
+   * wall moved one box's steps by up to ~30 g (477-529 g; clear of the wall
+   * they were 496-503 g for a 499 g lid). Coming off, the first plateau may
+   * already have a scoopful out, so up to LID_SCOOP_G more is accepted.
    */
   static constexpr float LID_TOL_FRAC = 0.1f;
   static constexpr float LID_TOL_MIN_G = 30.0f;
