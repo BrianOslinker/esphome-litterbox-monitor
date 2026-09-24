@@ -60,7 +60,7 @@ substitutions:
   # back kilograms heavier.
   box_empty_tolerance: "150" # g
 
-  # A step within this of the Lid Weight (set_lid_weight) is the lid coming
+  # A step within this of the Lid Weight setting is the lid coming
   # off or going back. Clear of walls one 499 g lid read 496-503 g; catching
   # on a wall moved it by up to 30 g.
   lid_tolerance: "30" # g
@@ -183,11 +183,6 @@ globals:
     initial_value: "0.0"
     restore_value: True
 
-  # Weight of a removable lid (set_lid_weight); 0 = no lid.
-  - id: lid_weight_g
-    type: float # g
-    initial_value: "0.0"
-    restore_value: True
 
   # Last full calibration timestamp
   - id: calibration_timestamp
@@ -302,20 +297,6 @@ api:
               return;
             }
             id(cat_weights)[cat - 1] = weight;
-    # A box with a lid that comes off to scoop or pour: its weight, so taking
-    # it off isn't a scoop and putting it back isn't waste. 0 = no lid.
-    - action: set_lid_weight
-      variables:
-        weight_g: float
-      then:
-        - lambda: !lambda |-
-            if (!(weight_g >= 0.0f && weight_g <= 2000.0f)) {
-              ESP_LOGE("box", "Invalid lid weight %.0f g. Must be 0-2000 g (0 = no lid).", weight_g);
-              return;
-            }
-            id(lid_weight_g) = weight_g;
-            ESP_LOGI("box", "Lid weight set to %.0f g", weight_g);
-        - script.execute: configure_box_monitor
     - action: calibration_tare
       then:
         - script.execute: calibrate_tare
@@ -1128,6 +1109,24 @@ number:
     restore_value: True
     on_value:
       - script.execute: configure_box_monitor
+  # A lid that comes off to scoop or pour: its weight, so taking it off
+  # isn't a scoop and putting it back isn't waste. 0 = no lid.
+  - platform: template
+    name: "Lid Weight"
+    id: lid_weight
+    icon: "mdi:tray-arrow-up"
+    device_class: weight
+    unit_of_measurement: g
+    entity_category: config
+    optimistic: true
+    min_value: 0
+    max_value: 2000
+    step: 1
+    mode: box
+    initial_value: "0"
+    restore_value: True
+    on_value:
+      - script.execute: configure_box_monitor
   # What "100%" means for the litter level. 0 leaves that sensor unknown.
   - platform: template
     name: "Full Litter Weight"
@@ -1387,7 +1386,7 @@ script:
           cfg.scoop_min_s = ${min_clean_event_duration};
           cfg.settle_s = ${top_up_settle_time};
           cfg.inert_sigma_g = id(still_limit).state;
-          cfg.lid_g = id(lid_weight_g);
+          cfg.lid_g = id(lid_weight).state;
           get_box_monitor().configure(cfg);
 
   # Start recording: activity just began, or the previous event closed while

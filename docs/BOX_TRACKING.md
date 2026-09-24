@@ -97,7 +97,8 @@ Added comes out a lid too high and a scoop is reported alongside. And if the
 event ends while the lid is off, the scale tares there and the lid going
 back on lands in Waste Weight.
 
-Set the lid's weight with `set_lid_weight` (0, the default, is no lid). The
+Set the lid's weight in Lid Weight, next to Empty Box Weight (0, the default,
+is no lid). The
 lid comes off and goes back as one step of about that weight between steady
 levels, where a scoop comes out in small drops and litter pours in as a
 ramp, so a step within `lid_tolerance` (30 g) of it is the lid. A lid's
