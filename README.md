@@ -176,12 +176,16 @@ That's it — the monitor is ready to use.
 - **Elimination Type:** Text sensor reporting `no_elimination`,
   `urination`, `defecation`, `both`, or `unknown` after each analyzed activity.
 - **Event Duration:** Seconds for the activity window that was analyzed (updated
-  when PoopSense runs at the end of activity).
-- **Waste Weight:** Estimated total accumulated waste (grams) since last clean.
+  when PoopSense runs at the end of activity). A visit the inactivity timeout
+  splits in two (a cat holding still for `event_timeout`) reports its whole
+  length.
+- **Waste Weight:** Estimated total waste (grams) left by recognised cats since
+  last clean.
 - **Litter Remaining:** Estimated remaining litter (kg).
 - **Litter Level:** The same estimate as a percentage of "Full Litter Weight".
   Unavailable until you set that number.
-- **Visits:** Number of cat visits since last clean.
+- **Visits:** Number of cat visits since last clean: visits where a known cat
+  was recognised, so it stays at 0 until cat weights are set.
 - **Deep Clean Timer:** Days left until next recommended deep clean / litter change.
 - **Deep Clean Due:** The same deadline as a timestamp, so it survives reboots
   on both ends and shows up before the clock has synced.
@@ -194,7 +198,8 @@ That's it — the monitor is ready to use.
   [How it works ->](docs/BOX_TRACKING.md)
 - **Elimination Std Dev:** Diagnostic; the standard deviation (grams) of the
   elimination window PoopSense classified last. Compare it with the
-  Classification Threshold when tuning.
+  Classification Threshold when tuning. Unknown when the last visit had no
+  elimination window.
 - **State Machine:** Diagnostic text sensor with the analyzer's current
   phase: `empty`, `entering`, `occupied`, `eliminating` or `gap`.
 - **Occupancy, Activity, Vibration:** Diagnostic sensors for physical presence,
