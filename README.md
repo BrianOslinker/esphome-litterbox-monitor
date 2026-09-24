@@ -189,8 +189,8 @@ That's it — the monitor is ready to use.
   on both ends and shows up before the clock has synced.
 - **Calibration Last Performed:** Diagnostic; timestamp of the last completed scale
   calibration. Unavailable until one has been run.
-- **Calibration Status:** Diagnostic; what the next `Calibrate Scale` press will do (tare
-  or set the known weight), or why the last step failed.
+- **Calibration Status:** Diagnostic; where the two-step calibration is up to
+  (ready to tare, waiting for the weight, calibrated), or why the last step failed.
 - **Litter Added:** Grams poured in at the last top-up or deep clean.
 - **Maintenance:** Event entity that fires `scoop`, `top_up`, `deep_clean` or
   `lifted` (the whole monitor was picked up and put back) once the counters
