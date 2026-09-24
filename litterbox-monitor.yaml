@@ -88,6 +88,11 @@ globals:
   ## General state
 
   # Known cat weights
+  # Local only, temporary: each filter's noise from the last comparison test.
+  - id: filter_refs
+    type: float[5] # g: raw, med3, med5, avg3, avg5
+    initial_value: "{NAN, NAN, NAN, NAN, NAN}"
+    restore_value: True
   - id: cat_weights
     type: float[5] # kg
     initial_value: "{0.0, 0.0, 0.0, 0.0, 0.0}"
@@ -196,6 +201,7 @@ esphome:
     priority: -100
     then:
       - script.execute: configure_box_monitor
+      - lambda: 'for (int v = 0; v < FilterCompare::N; v++) get_filter_compare().set_ref(v, id(filter_refs)[v]);'  # local only
       # The analyzer only runs inside an event, so its sensor would sit
       # unpublished until the first visit ended. With no event open it is
       # empty by definition, so say so rather than leaving it unknown.
@@ -251,6 +257,20 @@ api:
                   level: ERROR
                   tag: calibration
                   format: "Ignored: run calibration_tare first, and pass a known weight above 0 kg"
+    # Local only, temporary: a longer filter-comparison noise test.
+    - action: filter_noise_test
+      variables:
+        seconds: int
+      then:
+        - lambda: !lambda |-
+            if (seconds < 30 || seconds > 1200) {
+              ESP_LOGE("box", "filter_noise_test: 30-1200 s, not %d", (int) seconds);
+              return;
+            }
+            get_filter_compare().start_probe(seconds * 10);
+            char buf[40];
+            snprintf(buf, sizeof buf, "Measuring… %d s", (int) seconds);
+            id(filter_noise).publish_state(buf);
 
 ota:
   - platform: esphome
@@ -523,10 +543,21 @@ sensor:
           d2 = d1;
           d1 = g;
           bm.process(med);
-          get_filter_compare().process(g, med, id(still_limit).state);  // local only
+          // Local only, temporary: the same test on five filters (filter_compare.h).
+          FilterCompare &fc = get_filter_compare();
+          fc.process(g, id(still_limit).state);
+          if (fc.probe_running() && id(vibration_detected).state) {
+            fc.cancel_probe();
+            id(filter_noise).publish_state("Moved – cancelled");
+          }
+          if (fc.take_result()) {
+            char buf[255];
+            fc.noise_summary(buf, sizeof buf, 2 * ${top_up_settle_time});
+            id(filter_noise).publish_state(buf);
+            for (int v = 0; v < FilterCompare::N; v++) id(filter_refs)[v] = fc.ref(v);
+          }
           if (bm.noise_probe_running() && id(vibration_detected).state) {
             bm.cancel_noise_probe();
-            get_filter_compare().cancel_probe();  // local only
             id(scale_noise_test).publish_state("Moved – press to retry");
           }
           if (bm.take_noise_probe_result()) {
@@ -535,12 +566,6 @@ sensor:
             float lim_g = bm.noise_probe_limit_g(need_s);
             id(scale_noise).publish_state(med_g);
             id(min_still_limit).publish_state(lim_g);
-            // Local only: the same test on the unfiltered readings.
-            FilterCompare &fc = get_filter_compare();
-            id(unfiltered_scale_noise).publish_state(fc.probe_median_g());
-            id(unfiltered_min_still_limit).publish_state(fc.probe_limit_g(need_s));
-            id(noise_test_spikes).publish_state(fc.spikes());
-            id(noise_test_largest_spike).publish_state(fc.largest_spike_g());
             // Never held need_s under the largest candidate (3 g).
             id(scale_noise_test).publish_state(std::isnan(lim_g) ? "Too noisy – check wiring" : "Done");
           }
@@ -752,58 +777,6 @@ sensor:
     unit_of_measurement: "g"
     accuracy_decimals: 1
     update_interval: never
-  # Local only, temporary (filter_compare.h): the stillness tests on the
-  # unfiltered readings, to judge the median of three.
-  - platform: template
-    id: unfiltered_scale_noise
-    name: "Unfiltered Scale Noise"
-    icon: "mdi:waveform"
-    entity_category: diagnostic
-    unit_of_measurement: "g"
-    accuracy_decimals: 2
-    update_interval: never
-  - platform: template
-    id: unfiltered_min_still_limit
-    name: "Unfiltered Minimum Still Limit"
-    icon: "mdi:waveform"
-    entity_category: diagnostic
-    unit_of_measurement: "g"
-    accuracy_decimals: 1
-    update_interval: never
-  # Readings more than 3 g from the median of three, in the last noise test.
-  - platform: template
-    id: noise_test_spikes
-    name: "Noise Test Spikes"
-    icon: "mdi:flash-alert"
-    entity_category: diagnostic
-    accuracy_decimals: 0
-    update_interval: never
-  - platform: template
-    id: noise_test_largest_spike
-    name: "Noise Test Largest Spike"
-    icon: "mdi:flash-alert"
-    entity_category: diagnostic
-    unit_of_measurement: "g"
-    accuracy_decimals: 1
-    update_interval: never
-  - platform: template
-    id: unfiltered_still_stretch
-    name: "Unfiltered Still Stretch"
-    icon: "mdi:timer-sand"
-    entity_category: diagnostic
-    unit_of_measurement: "s"
-    state_class: measurement
-    accuracy_decimals: 1
-    update_interval: never
-  - platform: template
-    id: unfiltered_still_stretch_plus
-    name: "Unfiltered Still Stretch +0.5 g"
-    icon: "mdi:timer-sand"
-    entity_category: diagnostic
-    unit_of_measurement: "s"
-    state_class: measurement
-    accuracy_decimals: 1
-    update_interval: never
   - platform: template
     name: "Visits since clean"
     id: visits
@@ -886,6 +859,24 @@ sensor:
           send_every: 4
 
 text_sensor:
+  # Local only, temporary (filter_compare.h). Per filter (raw, med3, med5,
+  # avg3, avg5): typical 1 s spread, smallest limit held 60 s straight, and
+  # the median of each 30 s slice's largest spread; then readings over 3 g
+  # off the median of three.
+  - platform: template
+    id: filter_noise
+    name: "Filter Comparison Noise"
+    icon: "mdi:filter"
+    entity_category: diagnostic
+    update_interval: never
+  # Per filter: the last event's longest still stretch, and the limit it was
+  # held to (the Still Limit scaled to that filter's noise).
+  - platform: template
+    id: filter_event
+    name: "Filter Comparison Event"
+    icon: "mdi:filter"
+    entity_category: diagnostic
+    update_interval: never
   - platform: template
     id: elimination_type_sensor
     name: "Elimination Type"
@@ -1100,6 +1091,7 @@ button:
       - lambda: !lambda |-
           get_box_monitor().start_noise_probe(120 * 10);
           get_filter_compare().start_probe(120 * 10);  // local only
+          id(filter_noise).publish_state("Measuring… 120 s");
           id(scale_noise_test).publish_state("Measuring… (2 min, hands off)");
   - platform: template
     name: "Calibrate Scale"
@@ -1217,8 +1209,11 @@ script:
                    box.box_measured_g, zero_g, box.zero_valid ? "" : " (unchecked)",
                    (int) box.absent);
           id(still_stretch).publish_state(box.longest_still_s);
-          id(unfiltered_still_stretch).publish_state(get_filter_compare().longest_still_s());  // local only
-          id(unfiltered_still_stretch_plus).publish_state(get_filter_compare().longest_still_plus_s());
+          {  // local only
+            char buf[255];
+            get_filter_compare().event_summary(buf, sizeof buf, id(still_limit).state);
+            id(filter_event).publish_state(buf);
+          }
 
           // Maintenance outranks the visit analysis: a bag that happens to
           // weigh what a cat does matches the cat by weight, but it went
