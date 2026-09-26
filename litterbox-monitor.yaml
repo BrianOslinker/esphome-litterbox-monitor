@@ -53,7 +53,7 @@ substitutions:
 
   # Reading this close to 0 g while stable means the box is off the board.
   # Also the zero check: whatever it reads then is drift, and gets corrected.
-  box_off_tolerance: "300" # g
+  box_off_tolerance: "100" # g
 
   # Box back within this of Empty Box Weight, after having been off, is a
   # deep clean. A washed box comes back a few grams wet; a scooped one comes
