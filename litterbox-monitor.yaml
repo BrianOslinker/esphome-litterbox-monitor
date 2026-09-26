@@ -60,9 +60,10 @@ substitutions:
   # back kilograms heavier.
   box_empty_tolerance: "150" # g
 
-  # A step within this of the Lid Weight setting is the lid coming
-  # off or going back. Clear of walls one 499 g lid read 496-503 g; catching
-  # on a wall moved it by up to 30 g.
+  # A step within this of Lid Weight, between steady levels, is the lid
+  # coming off or going back. A lid weighs the same every time, so a fixed
+  # window, like box_empty_tolerance. A lid catching on a wall can throw a
+  # step off by tens of grams.
   lid_tolerance: "30" # g
 
   # Reading more negative than this means the monitor itself is in the air
