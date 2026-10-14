@@ -75,6 +75,11 @@ substitutions:
   # top-up early and is what a rise must do to count as one.
   top_up_settle_time: "30" # seconds
 
+  # Least a visit must leave on the scale to count as a pee or a poop.
+  # PoopSense reads posture, and a cat holding still reads the same whether
+  # it went or not; load cell hysteresis alone moves the reading 10-15 g.
+  min_elimination_weight: "15" # g
+
 globals:
   ## General state
 
@@ -1058,8 +1063,16 @@ script:
           // inert, and that is the stronger evidence.
           if (visit != nullptr && box.kind == BoxEventKind::NONE) {
             const StateResult &result = *visit;
-            id(elimination_type_sensor).publish_state(
-                elimination_type_str(result.elimination_type));
+            // A cat that held still and left nothing behind didn't go. Still
+            // on the scale (the timeout closed the event with it inside), it
+            // reads heavy and keeps the verdict.
+            EliminationType type = result.elimination_type;
+            float left_g = end_tared_kg * 1000.0f;
+            if (type != EliminationType::NO_ELIMINATION && left_g < ${min_elimination_weight}) {
+              ESP_LOGI("SA", "%s dropped: %.0f g left on the scale", elimination_type_str(type), left_g);
+              type = EliminationType::NO_ELIMINATION;
+            }
+            id(elimination_type_sensor).publish_state(elimination_type_str(type));
             id(event_duration_sensor).publish_state(duration);
 
             // Publish std dev of the single elimination period
@@ -1078,12 +1091,12 @@ script:
               }
               if (!continued) {
                 id(cat_daily_visits)[ci]++;
-                if (result.elimination_type == EliminationType::URINATION ||
-                    result.elimination_type == EliminationType::BOTH) {
+                if (type == EliminationType::URINATION ||
+                    type == EliminationType::BOTH) {
                   id(cat_daily_pees)[ci]++;
                 }
-                if (result.elimination_type == EliminationType::DEFECATION ||
-                    result.elimination_type == EliminationType::BOTH) {
+                if (type == EliminationType::DEFECATION ||
+                    type == EliminationType::BOTH) {
                   id(cat_daily_poops)[ci]++;
                 }
               }
