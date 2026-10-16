@@ -99,11 +99,6 @@ globals:
   ## General state
 
   # Known cat weights
-  # Local only, temporary: each filter's noise from the last comparison test.
-  - id: filter_refs
-    type: float[5] # g: raw, med3, med5, avg3, avg5
-    initial_value: "{NAN, NAN, NAN, NAN, NAN}"
-    restore_value: True
   - id: cat_weights
     type: float[5] # kg
     initial_value: "{0.0, 0.0, 0.0, 0.0, 0.0}"
@@ -248,7 +243,6 @@ esphome:
   comment: Smart Litterbox
   includes:
     - state_analyzer.h
-    - filter_compare.h  # local only, temporary
   project:
     name: "CristianChelu.LitterboxMonitor"
     version: "esp32.hx711"
@@ -259,7 +253,6 @@ esphome:
       - text_sensor.template.publish:
           id: calibration_step
           state: "Ready to tare"
-      - lambda: 'for (int v = 0; v < FilterCompare::N; v++) get_filter_compare().set_ref(v, id(filter_refs)[v]);'  # local only
       # The analyzer only runs inside an event, so its sensor would sit
       # unpublished until the first visit ended. With no event open it is
       # empty by definition, so say so rather than leaving it unknown.
@@ -275,7 +268,7 @@ esp32:
 logger:
   level: DEBUG
 
-# Reset reason, heap and loop time: what explains a restart.
+# Reset Reason: what explains a restart.
 debug:
   update_interval: 60s
 
@@ -323,20 +316,6 @@ api:
                   level: ERROR
                   tag: calibration
                   format: "Ignored: run calibration_tare first, and pass a known weight above 0 kg"
-    # Local only, temporary: a longer filter-comparison noise test.
-    - action: filter_noise_test
-      variables:
-        seconds: int
-      then:
-        - lambda: !lambda |-
-            if (seconds < 30 || seconds > 1200) {
-              ESP_LOGE("box", "filter_noise_test: 30-1200 s, not %d", (int) seconds);
-              return;
-            }
-            get_filter_compare().start_probe(seconds * 10);
-            char buf[40];
-            snprintf(buf, sizeof buf, "Measuring… %d s", (int) seconds);
-            id(filter_noise).publish_state(buf);
 
 ota:
   - platform: esphome
@@ -612,19 +591,6 @@ sensor:
           d2 = d1;
           d1 = g;
           bm.process(med);
-          // Local only, temporary: the same test on five filters (filter_compare.h).
-          FilterCompare &fc = get_filter_compare();
-          fc.process(g, id(still_limit).state);
-          if (fc.probe_running() && id(vibration_detected).state) {
-            fc.cancel_probe();
-            id(filter_noise).publish_state("Moved – cancelled");
-          }
-          if (fc.take_result()) {
-            char buf[255];
-            fc.noise_summary(buf, sizeof buf, 2 * ${top_up_settle_time});
-            id(filter_noise).publish_state(buf);
-            for (int v = 0; v < FilterCompare::N; v++) id(filter_refs)[v] = fc.ref(v);
-          }
           if (bm.noise_probe_running() && id(vibration_detected).state) {
             bm.cancel_noise_probe();
             id(scale_noise_test).publish_state("Moved – press to retry");
@@ -949,14 +915,6 @@ sensor:
     id: uptime_sensor
     name: "Uptime"
     disabled_by_default: True
-  # A shrinking minimum points at a leak; a long loop at something blocking.
-  - platform: debug
-    free:
-      name: "Heap Free"
-    min_free:
-      name: "Heap Min Free"
-    loop_time:
-      name: "Loop Time"
 
 text_sensor:
   # Why the monitor last booted: power on, brownout, software, watchdog,
@@ -964,24 +922,6 @@ text_sensor:
   - platform: debug
     reset_reason:
       name: "Reset Reason"
-  # Local only, temporary (filter_compare.h). Per filter (raw, med3, med5,
-  # avg3, avg5): typical 1 s spread, smallest limit held 60 s straight, and
-  # the median of each 30 s slice's largest spread; then readings over 3 g
-  # off the median of three.
-  - platform: template
-    id: filter_noise
-    name: "Filter Comparison Noise"
-    icon: "mdi:filter"
-    entity_category: diagnostic
-    update_interval: never
-  # Per filter: the last event's longest still stretch, and the limit it was
-  # held to (the Still Limit scaled to that filter's noise).
-  - platform: template
-    id: filter_event
-    name: "Filter Comparison Event"
-    icon: "mdi:filter"
-    entity_category: diagnostic
-    update_interval: never
   - platform: template
     id: elimination_type_sensor
     lambda: |-
@@ -1275,8 +1215,6 @@ button:
     on_press:
       - lambda: !lambda |-
           get_box_monitor().start_noise_probe(300 * 10);
-          get_filter_compare().start_probe(300 * 10);  // local only
-          id(filter_noise).publish_state("Measuring… 300 s");
           id(scale_noise_test).publish_state("Measuring… (5 min, hands off)");
   - platform: template
     name: "Calibrate Scale"
@@ -1409,7 +1347,6 @@ script:
           get_analyzer().attach_buffer(&get_weight_buf());
           get_sample_idx() = 0;
           get_box_monitor().begin_event((id(tare_value) + id(auto_tare_value)) * 1000.0f);
-          get_filter_compare().begin_event((id(tare_value) + id(auto_tare_value)) * 1000.0f);  // local only
           ESP_LOGD("SA", "Event start, analyzer reset");
       # The inactivity timeout is otherwise only armed when vibration stops,
       # so an event opened over a box that is already still (re-opened for
@@ -1470,11 +1407,6 @@ script:
                    box.box_measured_g, zero_g, box.zero_valid ? "" : " (unchecked)",
                    (int) box.absent, box.lid_off ? "off" : "on", box.lid_delta_g);
           id(still_stretch).publish_state(box.longest_still_s);
-          {  // local only
-            char buf[255];
-            get_filter_compare().event_summary(buf, sizeof buf, id(still_limit).state);
-            id(filter_event).publish_state(buf);
-          }
 
           // Maintenance outranks the visit analysis: a bag that happens to
           // weigh what a cat does matches the cat by weight, but it went
