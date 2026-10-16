@@ -182,11 +182,10 @@ defecation.
 
 - **Scale hysteresis hides very small deposits.**  Load cells have a small
   amount of mechanical hysteresis -- a cat can enter, leave nothing, and
-  exit, yet the reading shifts by 10-15 g.  A minimum waste threshold
-  (`min_elimination_weight`, 15 g) is applied to avoid false positives:
-  a visit that leaves less is `no_elimination`, however still the cat
-  held.  This means genuinely tiny deposits (e.g. a few grams of urine
-  during a UTI bout) fall below the noise floor and go undetected.  This is a hardware limitation, not a software
+  exit, yet the reading shifts by 10-15 g.  A minimum waste threshold is
+  applied to avoid false positives, which means genuinely tiny deposits
+  (e.g. a few grams of urine during a UTI bout) fall below the noise
+  floor and go undetected.  This is a hardware limitation, not a software
   one.
 
 

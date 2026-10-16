@@ -90,11 +90,6 @@ substitutions:
   # Still Stretch and Measure Scale Noise).
   top_up_still_sigma: "1.5" # g — this board: under 1 g it never held 30 s (16 s max); 143 s under 1.5 g
 
-  # Least a visit must leave on the scale to count as a pee or a poop.
-  # PoopSense reads posture, and a cat holding still reads the same whether
-  # it went or not; load cell hysteresis alone moves the reading 10-15 g.
-  min_elimination_weight: "15" # g
-
 globals:
   ## General state
 
@@ -1413,20 +1408,12 @@ script:
           // inert, and that is the stronger evidence.
           if (visit != nullptr && box.kind == BoxEventKind::NONE) {
             const StateResult &result = *visit;
-            // A cat that held still and left nothing behind didn't go. Still
-            // on the scale (the timeout closed the event with it inside), it
-            // reads heavy and keeps the verdict.
-            EliminationType type = result.elimination_type;
-            float left_g = end_tared_kg * 1000.0f;
-            if (type != EliminationType::NO_ELIMINATION && left_g < ${min_elimination_weight}) {
-              ESP_LOGI("SA", "%s dropped: %.0f g left on the scale", elimination_type_str(type), left_g);
-              type = EliminationType::NO_ELIMINATION;
-            }
             // A continued event is the second half of a visit the timeout
             // split: the cat leaving. It only adds waste; the result stays the
             // first half's, which the daily counts were taken from.
             if (!continued) {
-              id(elimination_type_sensor).publish_state(elimination_type_str(type));
+              id(elimination_type_sensor).publish_state(
+                  elimination_type_str(result.elimination_type));
               id(event_duration_sensor).publish_state(duration);
 
               // Publish std dev of the single elimination period
@@ -1446,12 +1433,12 @@ script:
               }
               if (!continued) {
                 id(cat_daily_visits)[ci]++;
-                if (type == EliminationType::URINATION ||
-                    type == EliminationType::BOTH) {
+                if (result.elimination_type == EliminationType::URINATION ||
+                    result.elimination_type == EliminationType::BOTH) {
                   id(cat_daily_pees)[ci]++;
                 }
-                if (type == EliminationType::DEFECATION ||
-                    type == EliminationType::BOTH) {
+                if (result.elimination_type == EliminationType::DEFECATION ||
+                    result.elimination_type == EliminationType::BOTH) {
                   id(cat_daily_poops)[ci]++;
                 }
               }
