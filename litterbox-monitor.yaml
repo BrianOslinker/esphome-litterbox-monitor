@@ -237,6 +237,7 @@ esphome:
   friendly_name: Litterbox
   comment: Smart Litterbox
   includes:
+    - local_ring.h
     - state_analyzer.h
   project:
     name: "CristianChelu.LitterboxMonitor"
@@ -611,13 +612,15 @@ sensor:
           if (!id(event_open)) return;
           float tared_g = (x - id(tare_value) - id(auto_tare_value)) * 1000.0f;
           static AnalyzerState prev_state = AnalyzerState::EMPTY;
-          get_analyzer().process_sample(tared_g, get_sample_idx());
+          // The state machine runs on what the buffer holds (1 g, or 0.1 g
+          // while occupied), not on the raw float, as upstream #12 does.
+          float seen_g = get_weight_buf().push(tared_g);
+          get_analyzer().process_sample(seen_g, get_sample_idx());
           AnalyzerState cur = get_analyzer().current_state();
           if (cur != prev_state) {
             id(state_machine_state).publish_state(analyzer_state_str(cur));
             prev_state = cur;
           }
-          get_weight_buf().push(tared_g);
           get_sample_idx()++;
 
           // Fresh litter sitting dead still doesn't need to wait out the
