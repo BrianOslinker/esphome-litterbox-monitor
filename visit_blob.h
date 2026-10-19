@@ -204,9 +204,9 @@ class VisitRecorder {
 
     const BoxEvent &bx = *e.box;
     w.printf("\"box\":{\"kind\":\"%s\",\"level\":%.9g,\"added\":%.9g,\"box\":%.9g,"
-             "\"zero_valid\":%s,\"zero\":%.9g,\"absent\":%s,\"scooped\":%s},",
+             "\"zero_valid\":%s,\"zero\":%.9g,\"absent\":%s,\"scooped\":%s,\"lid_off\":%s,\"lid_delta\":%.9g},",
              box_event_str(bx.kind), bx.level_g, bx.litter_added_g, bx.box_measured_g, b(bx.zero_valid),
-             bx.zero_error_g, b(bx.absent), b(bx.scooped));
+             bx.zero_error_g, b(bx.absent), b(bx.scooped), b(bx.lid_off), bx.lid_delta_g);
 
     w.printf("\"config\":{\"cat_weights\":[");
     for (int i = 0; i < SA_MAX_CATS; i++) w.printf(i ? ",%.9g" : "%.9g", c.cat_weights_kg[i]);
@@ -216,9 +216,10 @@ class VisitRecorder {
              c.activity_off_s, c.event_timeout_s);
     w.printf("\"box\":{\"box_g\":%.9g,\"off_tol\":%.9g,\"empty_tol\":%.9g,\"lift\":%.9g,"
              "\"return_tol\":%.9g,\"top_up_min\":%.9g,\"scoop_min\":%.9g,\"scoop_min_s\":%d,"
-             "\"settle_s\":%d}},",
+             "\"settle_s\":%d,\"lid_g\":%.9g,\"lid_tol\":%.9g}},",
              c.box.box_g, c.box.off_tol_g, c.box.empty_tol_g, c.box.lift_g, c.box.return_tol_g,
-             c.box.top_up_min_g, c.box.scoop_min_g, c.box.scoop_min_s, c.box.settle_s);
+             c.box.top_up_min_g, c.box.scoop_min_g, c.box.scoop_min_s, c.box.settle_s, c.box.lid_g,
+             c.box.lid_tol_g);
 
     w.printf("\"fw\":{\"project\":\"%s\",\"version\":\"%s\"}}", e.project, e.version);
   }
