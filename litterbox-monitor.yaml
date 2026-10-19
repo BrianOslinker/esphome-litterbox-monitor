@@ -254,6 +254,15 @@ esphome:
       # empty by definition, so say so rather than leaving it unknown.
       - lambda: 'id(state_machine_state).publish_state("empty");'
       - script.execute: restore_totals
+      # The kept values (Litter Added, last visit, ...) come back from flash:
+      # publish them once now. They update themselves after that, so no
+      # polling (60 s re-sent the same value forever).
+      - component.update: litter_added
+      - component.update: measured_box_weight
+      - component.update: zero_drift
+      - component.update: event_duration_sensor
+      - component.update: elimination_std_dev_sensor
+      - component.update: elimination_type_sensor
 
 esp32:
   board: esp32dev
@@ -756,7 +765,7 @@ sensor:
     unit_of_measurement: "g"
     state_class: measurement
     accuracy_decimals: 0
-    update_interval: 60s
+    update_interval: never
     disabled_by_default: True
   # What the empty box weighed when it last came back washed. Compare with
   # the Empty Box Weight setting.
@@ -771,7 +780,7 @@ sensor:
     unit_of_measurement: "g"
     state_class: measurement
     accuracy_decimals: 0
-    update_interval: 60s
+    update_interval: never
     disabled_by_default: True
   # What the bare board read the last time the box was off it, before the
   # zero was corrected. Grows with temperature and cell creep; a jump means
@@ -787,7 +796,7 @@ sensor:
     unit_of_measurement: "g"
     state_class: measurement
     accuracy_decimals: 0
-    update_interval: 60s
+    update_interval: never
     disabled_by_default: True
   # Longest stretch of the last event that held still (1 s σ) under the
   # Still Limit while something was on the box (min_top_up_weight or more):
@@ -884,7 +893,7 @@ sensor:
     state_class: measurement
     unit_of_measurement: "s"
     accuracy_decimals: 0
-    update_interval: 60s
+    update_interval: never
   - platform: template
     id: elimination_std_dev_sensor
     lambda: return id(saved_elimination_std_dev);
@@ -896,7 +905,7 @@ sensor:
     state_class: measurement
     unit_of_measurement: "g"
     accuracy_decimals: 1
-    update_interval: 60s
+    update_interval: never
   - platform: wifi_signal
     id: wifi_signal_db
     name: "WiFi Signal"
@@ -933,7 +942,7 @@ text_sensor:
               id(saved_elimination_type) = t;
     name: "Elimination Type"
     icon: "mdi:toilet"
-    update_interval: 60s
+    update_interval: never
   - platform: template
     id: state_machine_state
     name: "State Machine"
