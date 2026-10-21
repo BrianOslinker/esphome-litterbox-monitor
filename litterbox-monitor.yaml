@@ -325,6 +325,23 @@ api:
 ota:
   - platform: esphome
     encryption:
+    # Lets `esphome upload --partition-table` replace the partition table over
+    # the air, for upstream #12's visit journal partition (2026-10-21).
+    allow_partition_access: true
+
+# TEMPORARY (2026-10-21): logs the saved calibration, tare and cat weights
+# once a minute, as a record before the partition table changes. Boot-time
+# lines go out before any log client connects, hence the interval. Remove
+# once the journal build is in.
+interval:
+  - interval: 60s
+    then:
+      - lambda: |-
+          ESP_LOGI("saved", "calibration_coefficient=%.6f calibration_tare=%.3f tare=%.6f auto_tare=%.6f",
+                   id(calibration_coefficient), id(calibration_tare), id(tare_value), id(auto_tare_value));
+          ESP_LOGI("saved", "calibration_timestamp=%lld cat_weights=%.4f,%.4f litter_changed=%lld",
+                   (long long) id(calibration_timestamp), id(cat_weights)[0], id(cat_weights)[1],
+                   (long long) id(litter_changed_date));
 
 wifi:
   ssid: !secret wifi_ssid
