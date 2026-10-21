@@ -1,0 +1,20 @@
+# Local partition table for the visit journal (upstream #12), 4 MB flash.
+#
+# Upstream lists the journal under esp32: partitions:, and ESPHome then lays
+# the table out itself, which moves nvs from 0x390000 to 0x2F0000 - every
+# saved setting (calibration, tare, cat weights, numbers, totals) starts
+# over. This keeps nvs exactly where the old table had it and puts the
+# journal in the room the smaller app slots leave. The app slots are the
+# size ESPHome's own layout gives (0x170000, ~1.44 MB each).
+#
+# Installed over the air: esphome upload --partition-table (needs the ota
+# block's allow_partition_access). Do not change offsets on a device in
+# service: the next table must keep nvs here too.
+#
+# Name,    Type, SubType,   Offset,   Size
+otadata,   data, ota,       0x9000,   0x2000
+phy_init,  data, phy,       0xB000,   0x1000
+app0,      app,  ota_0,     0x10000,  0x170000
+app1,      app,  ota_1,     0x180000, 0x170000
+visits,    data, undefined, 0x2F0000, 0x80000
+nvs,       data, nvs,       0x390000, 0x70000
