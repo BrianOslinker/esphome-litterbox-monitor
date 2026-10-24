@@ -716,7 +716,9 @@ class StateAnalyzer {
     // Downgrade short ELIMINATING periods. 8 s matches cat-health's
     // StateAnalyzer (re-tuned 2026-08-19 on 1818 visits); at 5 s a cat
     // holding still for a few seconds while exploring read as an elimination.
-    const int min_elim = 8 * HZ;
+    // Local: 7 s. Lucy's small pee on 2026-10-24 held still for 7.0 s and
+    // was dropped at 8 s; replaying the journal at 7 s changed no other visit.
+    const int min_elim = 7 * HZ;
     for (int i = 0; i < n; i++) {
       if (tmp[i].state == AnalyzerState::ELIMINATING &&
           (tmp[i].end - tmp[i].start) < min_elim)
