@@ -718,10 +718,16 @@ class StateAnalyzer {
     // holding still for a few seconds while exploring read as an elimination.
     // Local: 7 s. Lucy's small pee on 2026-10-24 held still for 7.0 s and
     // was dropped at 8 s; replaying the journal at 7 s changed no other visit.
+    // A 5-7 s period is kept when the cat left weight behind: Lucy's visit on
+    // 2026-10-26 held still for 6.8 s and left +37 g. Exploring cats that hold
+    // still ~5 s leave nothing, so they still read as no elimination.
     const int min_elim = 7 * HZ;
+    const int min_elim_with_waste = 5 * HZ;
+    const float min_elim_waste_g = 10.0f;
     for (int i = 0; i < n; i++) {
-      if (tmp[i].state == AnalyzerState::ELIMINATING &&
-          (tmp[i].end - tmp[i].start) < min_elim)
+      int len = tmp[i].end - tmp[i].start;
+      if (tmp[i].state == AnalyzerState::ELIMINATING && len < min_elim &&
+          !(len >= min_elim_with_waste && waste_weight_ >= min_elim_waste_g))
         tmp[i].state = AnalyzerState::OCCUPIED;
     }
 
