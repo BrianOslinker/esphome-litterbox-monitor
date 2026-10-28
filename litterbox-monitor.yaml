@@ -1142,6 +1142,9 @@ script:
             ESP_LOGD("SA", "Short event skipped: %ds, %d samples", duration, samples);
           }
           bool cat_event = visit != nullptr && visit->detected_cat >= 0;
+          // The cat was weighed from what sat on the box when it got in (the
+          // lid put back a moment before); its waste is measured from there too.
+          if (cat_event) end_tared_kg -= get_analyzer().pre_entry_g() / 1000.0f;
           id(state_machine_state).publish_state("empty");
 
           // What happened to the box, judged on the absolute level. A
