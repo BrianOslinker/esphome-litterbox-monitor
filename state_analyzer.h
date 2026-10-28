@@ -381,6 +381,10 @@ class StateAnalyzer {
 
     current_weight_g_ = weight;
     current_sample_ = index;
+    // Everything below is measured from what sat on the box just before the
+    // cat got in. current_weight_g_ stays raw: the weight buffer's zones are.
+    track_pre_entry(weight);
+    weight -= pre_entry_g_;
     window_.push(weight);
     weight_hist_.push(weight);
     float mean1s = window_.mean();
@@ -481,6 +485,7 @@ class StateAnalyzer {
           }
         } else if (gap_cnt_ > REENTRY_WIN) {
           waste_weight_ = static_cast<float>(weight);
+          waste_set_ = true;
           return;
         }
         break;
@@ -504,8 +509,12 @@ class StateAnalyzer {
     // before REENTRY_WIN, so the GAP branch never gets to set the waste.
     // What the scale settled on over the last second of that gap is the
     // same thing end_event tares away, so take it from there.
-    if (state_ == AnalyzerState::GAP && current_sample_ - state_start_ >= WINDOW)
+    if (state_ == AnalyzerState::GAP && current_sample_ - state_start_ >= WINDOW) {
       waste_weight_ = window_.mean();
+      waste_set_ = true;
+    }
+    // No cat, nothing to measure from: report against the tare, as before.
+    if (!cat_seen_ && waste_set_) waste_weight_ += pre_entry_g_;
     result_.waste_weight = waste_weight_;
     result_.period_count = 0;
     result_.elimination_type = EliminationType::UNKNOWN;
@@ -544,9 +553,22 @@ class StateAnalyzer {
     tx_count_ = 0;
     waste_weight_ = 0.0f;
     for (int i = 0; i < SA_MAX_CATS; i++) cat_presence_[i] = 0;
+    pre_entry_g_ = 0.0f;
+    pre_win_.reset(WINDOW);
+    pre_still_ = 0;
+    cat_seen_ = false;
+    waste_set_ = false;
   }
 
   AnalyzerState current_state() const { return state_; }
+
+  /**
+   * Level the visit was measured from, relative to the event's tare: the
+   * last still plateau before any cat was seen. Non-zero when something was
+   * put on the box, or the box settled, after the event began (the lid going
+   * back on just before a cat jumps in). Waste should be taken from it too.
+   */
+  float pre_entry_g() const { return pre_entry_g_; }
 
  private:
   static constexpr int HZ = 10;
@@ -562,6 +584,16 @@ class StateAnalyzer {
   static constexpr int MAX_SESSION = 60 * 60 * HZ;
   static constexpr float KNOWN_TOL = 0.1f;
   static constexpr int WINDOW = 10;
+  /**
+   * A pre-entry plateau: 1 s spread under PRE_STILL_G, held PRE_HOLD, within
+   * PRE_MAX_G of the tare. The lid held 0.5-1.6 g; a cat holding part of its
+   * weight on the box wobbles far more. The cap keeps a cat's paws out of it:
+   * a baseline taken under them would push the cat outside its match window
+   * and lose the visit, which is worse than a wrong weight.
+   */
+  static constexpr float PRE_STILL_G = 2.0f;
+  static constexpr int PRE_HOLD = 3 * HZ;
+  static constexpr float PRE_MAX_G = 600.0f;
 
   AnalyzerState state_ = AnalyzerState::EMPTY;
   float known_g_[SA_MAX_CATS] = {};
@@ -586,6 +618,11 @@ class StateAnalyzer {
   float best_elim_weight_ = 0.0f;
   int best_elim_dur_ = 0;
   float current_weight_g_ = 0.0f;
+  float pre_entry_g_ = 0.0f;
+  Ring pre_win_{WINDOW};
+  int pre_still_ = 0;
+  bool cat_seen_ = false;  // OCCUPIED reached: the baseline is frozen
+  bool waste_set_ = false;
   WeightBuffer *wbuf_ = nullptr;
   StateTransition txs_[SA_MAX_TRANSITIONS];
   int tx_count_ = 0;
@@ -621,6 +658,7 @@ class StateAnalyzer {
 
   void transition_to(AnalyzerState ns, int offset = 0) {
     if (state_ == ns) return;
+    if (ns == AnalyzerState::OCCUPIED || ns == AnalyzerState::ELIMINATING) cat_seen_ = true;
     if (session_active_ && ns == AnalyzerState::EMPTY) {
       state_ = ns;
       session_active_ = false;
@@ -639,6 +677,17 @@ class StateAnalyzer {
     }
     state_ = ns;
     state_start_ = current_sample_;
+  }
+
+  void track_pre_entry(float raw_g) {
+    if (cat_seen_) return;
+    pre_win_.push(raw_g);
+    if (pre_win_.size() < WINDOW || sqrtf(pre_win_.variance()) >= PRE_STILL_G) {
+      pre_still_ = 0;
+      return;
+    }
+    float m = pre_win_.mean();
+    if (++pre_still_ >= PRE_HOLD && std::abs(m) <= PRE_MAX_G) pre_entry_g_ = m;
   }
 
   /** among cats within tolerance, smallest absolute diff wins. */
