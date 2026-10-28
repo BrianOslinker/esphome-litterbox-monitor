@@ -1498,15 +1498,19 @@ script:
           bool cat_event = visit != nullptr && visit->detected_cat >= 0;
           // The cat was weighed from what sat on the box when it got in (the
           // lid put back a moment before); its waste is measured from there too.
-          if (cat_event) end_tared_kg -= get_analyzer().pre_entry_g() / 1000.0f;
+          float pre_entry_g = cat_event ? get_analyzer().pre_entry_g() : 0.0f;
+          end_tared_kg -= pre_entry_g / 1000.0f;
           id(state_machine_state).publish_state("empty");
 
           // What happened to the box, judged on the absolute level. A
           // continued event is a cat leaving, never a scoop.
           const BoxEvent &box = get_box_monitor().finalize(duration, cat_event || continued);
           // The lid going back on is not waste (nor a cat still inside), and
-          // taking it off is not a loss.
-          end_tared_kg -= box.lid_delta_g / 1000.0f;
+          // taking it off is not a loss. Unless it moved before the cat got
+          // in: the visit was already measured from above it.
+          bool lid_before_cat = pre_entry_g * box.lid_delta_g > 0.0f &&
+                                fabsf(pre_entry_g) >= fabsf(box.lid_delta_g) - ${lid_tolerance};
+          if (!lid_before_cat) end_tared_kg -= box.lid_delta_g / 1000.0f;
           float zero_g = box.zero_valid ? box.zero_error_g : 0.0f;
           float zero_kg = zero_g / 1000.0f;
           float level_kg = (box.level_g - zero_g) / 1000.0f;
