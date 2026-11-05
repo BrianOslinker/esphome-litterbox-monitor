@@ -595,7 +595,14 @@ class StateAnalyzer {
   static constexpr int HZ = 10;
   /** sqrt(250) — TS compares sqrt(sample var) to this (not variance to 250). */
   static constexpr float STABLE_VARIANCE_SQRT = 15.811388f;
-  static constexpr float STABLE_MERGE_GAP = 1.5f * HZ;
+  // Local: 3 s (upstream 1.5 s). Osiris's poop on 2026-11-02 02:18 held
+  // still for 1-4 s at a time with 2-3 s jolts between, so no piece reached
+  // the 7 s minimum. 2.5-5 s changes no other journaled visit.
+  static constexpr float STABLE_MERGE_GAP = 3.0f * HZ;
+  // A merged period that moves this much is not a cat holding still (real
+  // eliminating periods measure < 10 g); without it a 3 s gap bridged a
+  // 5.8 s, 158 g period into Lucy's 2026-10-28 visit and made it "unknown".
+  static constexpr float ELIM_MAX_STD_DEV = 20.0f;
   static constexpr float ENTRY_DELTA_MIN = 1200.0f;
   static constexpr float ENTRY_DELTA_FRAC = 0.22f;
   static constexpr float PRESENCE_FRAC = 0.28f;
@@ -825,7 +832,8 @@ class StateAnalyzer {
     StatePeriod *elim = period_scratch_;
     int ec = 0;
     for (int i = 0; i < count; i++) {
-      if (p[i].state == AnalyzerState::ELIMINATING && p[i].std_dev >= 0.0f)
+      if (p[i].state == AnalyzerState::ELIMINATING && p[i].std_dev >= 0.0f &&
+          p[i].std_dev < ELIM_MAX_STD_DEV)
         elim[ec++] = p[i];
     }
 
