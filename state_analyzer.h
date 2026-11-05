@@ -356,6 +356,20 @@ class WeightBuffer {
 
 class StateAnalyzer {
  public:
+  // Local: judge one cat by how long it holds still instead of by wobble.
+  // Lucy's pees hold still for only 3-9 s at std dev 3-7 g, so the wobble
+  // rule missed them or called them poops; her poops held still 14-20 s.
+  // For that cat only: a still stretch counts from min_still_s when it left
+  // >= 10 g, the longest stretch decides (<= pee_max_s pee, longer poop) and
+  // nothing left behind (<= 0 g) is no elimination - lying or standing on
+  // the lid reads as long, very still stretches. cat < 0 turns it off.
+  // Kept across init(); the other cats keep the wobble rule.
+  void set_duration_rule(int cat, float pee_max_s, float min_still_s) {
+    rule_cat_ = cat;
+    rule_pee_max_ = static_cast<int>(lroundf(pee_max_s * HZ));
+    rule_min_still_ = static_cast<int>(lroundf(min_still_s * HZ));
+  }
+
   void init(const float *known_weights_kg, int num_cats) {
     num_known_ = 0;
     for (int i = 0; i < SA_MAX_CATS; i++) {
@@ -520,7 +534,12 @@ class StateAnalyzer {
     result_.elimination_type = EliminationType::UNKNOWN;
     result_.detected_cat = -1;
 
-    post_process(result_.periods, result_.period_count);
+    // Local: the cat is known before the periods are judged, so a cat with
+    // its own duration rule (set_duration_rule) can be judged by it.
+    const int cat = detected_cat_from_presence();
+    const bool duration_rule = rule_cat_ >= 0 && cat == rule_cat_;
+
+    post_process(result_.periods, result_.period_count, duration_rule);
 
     for (int i = 0; i < result_.period_count; i++) {
       result_.periods[i].std_dev =
@@ -528,9 +547,11 @@ class StateAnalyzer {
     }
 
     result_.elimination_type =
-        classify_elimination(result_.periods, result_.period_count, std_dev_threshold);
+        duration_rule
+            ? classify_by_duration(result_.periods, result_.period_count)
+            : classify_elimination(result_.periods, result_.period_count, std_dev_threshold);
 
-    result_.detected_cat = detected_cat_from_presence();
+    result_.detected_cat = cat;
 
     return result_;
   }
@@ -584,6 +605,10 @@ class StateAnalyzer {
   static constexpr int MAX_SESSION = 60 * 60 * HZ;
   static constexpr float KNOWN_TOL = 0.1f;
   static constexpr int WINDOW = 10;
+  // set_duration_rule; off by default.
+  int rule_cat_ = -1;
+  int rule_pee_max_ = 10 * HZ;
+  int rule_min_still_ = 5 * HZ;
   /**
    * A pre-entry plateau: 1 s spread under PRE_STILL_G, held PRE_HOLD, within
    * PRE_MAX_G of the tare. The lid held 0.5-1.6 g; a cat holding part of its
@@ -732,7 +757,7 @@ class StateAnalyzer {
     return near_known(rel) || rel > entry_threshold();
   }
 
-  void post_process(StatePeriod *out, int &count) {
+  void post_process(StatePeriod *out, int &count, bool duration_rule = false) {
     count = 0;
     if (tx_count_ == 0) return;
 
@@ -771,7 +796,7 @@ class StateAnalyzer {
     // 2026-10-26 held still for 6.8 s and left +37 g. Exploring cats that hold
     // still ~5 s leave nothing, so they still read as no elimination.
     const int min_elim = 7 * HZ;
-    const int min_elim_with_waste = 5 * HZ;
+    const int min_elim_with_waste = duration_rule ? rule_min_still_ : 5 * HZ;
     const float min_elim_waste_g = 10.0f;
     for (int i = 0; i < n; i++) {
       int len = tmp[i].end - tmp[i].start;
@@ -815,6 +840,17 @@ class StateAnalyzer {
       if (a_uri != b_uri) return EliminationType::BOTH;
     }
     return EliminationType::UNKNOWN;
+  }
+
+  // Local: set_duration_rule's verdict - the longest eliminating stretch.
+  EliminationType classify_by_duration(const StatePeriod *p, int count) const {
+    if (waste_weight_ <= 0.0f) return EliminationType::NO_ELIMINATION;
+    int longest = 0;
+    for (int i = 0; i < count; i++)
+      if (p[i].state == AnalyzerState::ELIMINATING)
+        longest = std::max(longest, p[i].end - p[i].start);
+    if (longest == 0) return EliminationType::NO_ELIMINATION;
+    return longest <= rule_pee_max_ ? EliminationType::URINATION : EliminationType::DEFECATION;
   }
 
 };
