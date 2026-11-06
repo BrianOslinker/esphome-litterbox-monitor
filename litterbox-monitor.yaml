@@ -611,7 +611,12 @@ sensor:
           // inactivity timeout (which only runs because the added mass keeps
           // the occupancy latch on). Nothing runs after this: end_event may
           // reopen the event and reset the buffers.
-          if (bm.settled() && !id(end_held)) {
+          if (bm.take_lid_back()) {
+            // The lid is back on and nothing went in: the cleaning is over.
+            // Closing now keeps a cat that jumps straight in out of it.
+            id(end_held) = false;
+            id(end_event).execute();
+          } else if (bm.settled() && !id(end_held)) {
             id(end_event).execute();
           } else if (id(end_held) && !bm.holding()) {
             // The lid went back on (or a cat got in, or it stayed off too long).

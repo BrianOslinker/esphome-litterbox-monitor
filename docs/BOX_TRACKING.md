@@ -43,7 +43,7 @@ When an event ends, before the tare moves, the first rule that fits wins:
 
 1. **Box still absent.** No verdict yet. Tare stays where it was.
 2. **Box came back empty** (within 150 g of Empty Box Weight, with its lid
-   or, if Lid Weight is set and the lid was seen off, without it; held 3 s)
+   or, if Lid Weight is set, without it; held 3 s)
    → `deep_clean`. Litter weight becomes whatever has gone in since, waste
    and visits reset, deep-clean timer restarts.
 3. **Monitor lifted and set back** within 100 g of where it was → `lifted`.
@@ -97,25 +97,38 @@ default, is no lid). Empty Box Weight is then the box with its lid on.
   for a moment; a cat landing overshoots its own weight by about 1 kg at
   most, and poured litter has no press. The rise must be about the lid's
   weight, or, when a scoop went with it, at least 200 g with the box going
-  dead still (1 s under 1 g) within 9 s.
-- **Not with a cat on:** nothing is decided while the box weighs a cat more
-  than where the lid left it.
+  dead still (1 s under 1 g) within 9 s. A lid set down gently, with no
+  press, still counts if the rise is about its weight, takes under 2.5 s
+  (a pour takes longer) and the box then goes dead still.
+- **Not with a cat on:** nothing is decided while a cat is on the box. With
+  the lid on, that is anything 2 kg above it. With the lid off, litter can
+  be poured in too, so a cat is a rise of 2 kg or more within 3 s (a pour
+  climbs for longer), until the box is back near where it was.
+- **After the box was away** (a deep clean), the levels from before mean
+  nothing: the first still level back is the new reference, with the lid as
+  it was. An empty box back without its lid is a deep clean and marks the
+  lid off.
 
 "Steady" here means a second under 4 g of spread, tighter than the plateaus
 the verdict uses, so hands resting on the box don't read as steps.
 
 **Holding the event open.** While the lid is off, the event it came off in
 stays open, so a cleaning is judged as a whole on where it started and
-ended, however long you pause. It closes after the lid goes back on, when a
-cat gets in, or after `lid_hold_time` (240 s). A lid left off longer than
-that stays counted as off, through any visits, until it is seen going back
-on.
+ended, however long you pause. It closes as soon as the lid is back on (so a
+cat that jumps straight in gets a visit of its own), unless litter went in,
+which still waits to settle as a top-up. It also closes when a cat gets in,
+or after `lid_hold_time` (240 s). A lid left off longer than that stays
+counted as off, through any visits, until it is seen going back on.
+
+Not handled: a cat getting in while the lid is still off and the event is
+held (the cleaning and the visit end up as one event, and the scoop is
+lost), and litter poured the instant the lid comes off, with no still level
+in between (the lid isn't seen).
 
 Every level measured with the lid off is counted as if it were on, taking it
 off counts as opening the box (no minimum duration for a scoop), and putting
 it back is not waste: the step it actually added is taken out, when that is
-within `lid_tolerance` of Lid Weight. An empty box counts for a deep clean
-without its lid only once the lid was seen coming off.
+within `lid_tolerance` of Lid Weight. 
 
 Keep the box and lid clear of walls: a lid catching on one moved the reading
 by up to 30 g.
