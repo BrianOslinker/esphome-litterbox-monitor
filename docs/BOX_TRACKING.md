@@ -120,10 +120,9 @@ which still waits to settle as a top-up. It also closes when a cat gets in,
 or after `lid_hold_time` (240 s). A lid left off longer than that stays
 counted as off, through any visits, until it is seen going back on.
 
-Not handled: a cat getting in while the lid is still off and the event is
-held (the cleaning and the visit end up as one event, and the scoop is
-lost), and litter poured the instant the lid comes off, with no still level
-in between (the lid isn't seen).
+Not handled yet: a cat getting in while the lid is still off and the event
+is held. The cleaning and the visit end up as one event, and the scoop is
+lost. After a restart the lid is assumed to be on.
 
 Every level measured with the lid off is counted as if it were on, taking it
 off counts as opening the box (no minimum duration for a scoop), and putting
