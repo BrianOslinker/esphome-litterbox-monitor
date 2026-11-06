@@ -60,11 +60,17 @@ substitutions:
   # back kilograms heavier.
   box_empty_tolerance: "150" # g
 
-  # A step within this of Lid Weight, between steady levels, is the lid
-  # coming off or going back. A lid weighs the same every time, so a fixed
+  # How close to Lid Weight a step (or a level below where the lid came off)
+  # must be to be the lid. A lid weighs the same every time, so a fixed
   # window, like box_empty_tolerance. A lid catching on a wall can throw a
   # step off by tens of grams.
   lid_tolerance: "30" # g
+
+  # With the lid off, the event it came off in stays open until it goes back
+  # on (or a cat gets in), so a cleaning is judged on where it started and
+  # ended. A lid left off longer than this ends it; the lid then stays
+  # counted as off until it is seen going back on.
+  lid_hold_time: "240" # seconds
 
   # Reading more negative than this means the monitor itself is in the air
   # (the frame hangs from the cells). Nothing else reads below zero.
@@ -125,6 +131,12 @@ globals:
 
   # An event is being recorded (begin_event ran, end_event hasn't yet)
   - id: event_open
+    type: bool
+    initial_value: "false"
+    restore_value: False
+
+  # end_event ran while the lid was off and was put off until it goes back on
+  - id: end_held
     type: bool
     initial_value: "false"
     restore_value: False
@@ -599,8 +611,12 @@ sensor:
           // inactivity timeout (which only runs because the added mass keeps
           // the occupancy latch on). Nothing runs after this: end_event may
           // reopen the event and reset the buffers.
-          if (bm.settled()) {
+          if (bm.settled() && !id(end_held)) {
             id(end_event).execute();
+          } else if (id(end_held) && !bm.holding()) {
+            // The lid went back on (or a cat got in, or it stayed off too long).
+            id(end_held) = false;
+            if (!id(activity_detected).state) id(end_event).execute();
           }
 
   - platform: copy
@@ -1081,6 +1097,7 @@ script:
           cfg.off_tol_g = ${box_off_tolerance};
           cfg.empty_tol_g = ${box_empty_tolerance};
           cfg.lid_tol_g = ${lid_tolerance};
+          cfg.lid_hold_s = ${lid_hold_time};
           cfg.lift_g = ${monitor_lift_threshold};
           cfg.return_tol_g = ${lift_return_tolerance};
           cfg.top_up_min_g = ${min_top_up_weight};
@@ -1123,6 +1140,12 @@ script:
       - script.stop: event_timeout
       - lambda: !lambda |-
           if (!id(event_open)) return;
+          if (get_box_monitor().holding()) {
+            if (!id(end_held)) ESP_LOGI("BOX", "Lid off: keeping the event open until it goes back on");
+            id(end_held) = true;
+            return;
+          }
+          id(end_held) = false;
           id(event_open) = false;
 
           time_t now = id(homeassistant_time).now().timestamp;
@@ -1371,6 +1394,7 @@ script:
       - script.stop: event_timeout
       - lambda: !lambda |-
           id(event_open) = false;
+          id(end_held) = false;
           // Nothing to record, but the entry must be let go or the next
           // visit cannot open one.
           get_visit_store().discard();
