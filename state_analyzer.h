@@ -372,11 +372,14 @@ class StateAnalyzer {
   // >= 10 g, the longest stretch decides (<= pee_max_s pee, longer poop) and
   // nothing left behind (<= 0 g) is no elimination - lying or standing on
   // the lid reads as long, very still stretches. cat < 0 turns it off.
+  // With less than 10 g left a stretch needs min_still_low_s (others: 7 s):
+  // her 2026-11-07 10:41 pee held still 6.1 s and left only ~1 g.
   // Kept across init(); the other cats keep the wobble rule.
-  void set_duration_rule(int cat, float pee_max_s, float min_still_s) {
+  void set_duration_rule(int cat, float pee_max_s, float min_still_s, float min_still_low_s = 5.0f) {
     rule_cat_ = cat;
     rule_pee_max_ = static_cast<int>(lroundf(pee_max_s * HZ));
     rule_min_still_ = static_cast<int>(lroundf(min_still_s * HZ));
+    rule_min_still_low_ = static_cast<int>(lroundf(min_still_low_s * HZ));
   }
 
   void init(const float *known_weights_kg, int num_cats) {
@@ -629,6 +632,7 @@ class StateAnalyzer {
   int rule_cat_ = -1;
   int rule_pee_max_ = 10 * HZ;
   int rule_min_still_ = 5 * HZ;
+  int rule_min_still_low_ = 5 * HZ;
   /**
    * A pre-entry plateau: 1 s spread under PRE_STILL_G, held PRE_HOLD, within
    * PRE_MAX_G of the tare. The lid held 0.5-1.6 g; a cat holding part of its
@@ -815,7 +819,8 @@ class StateAnalyzer {
     // A 5-7 s period is kept when the cat left weight behind: Lucy's visit on
     // 2026-10-26 held still for 6.8 s and left +37 g. Exploring cats that hold
     // still ~5 s leave nothing, so they still read as no elimination.
-    const int min_elim = 7 * HZ;
+    // The duration-rule cat: rule_min_still_low_ (5 s) - see set_duration_rule.
+    const int min_elim = duration_rule ? rule_min_still_low_ : 7 * HZ;
     const int min_elim_with_waste = duration_rule ? rule_min_still_ : 5 * HZ;
     const float min_elim_waste_g = 10.0f;
     for (int i = 0; i < n; i++) {

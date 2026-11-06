@@ -21,13 +21,14 @@ substitutions:
   # Local: one cat judged by how long it holds still rather than by how much
   # it wobbles (Elimination Std Dev). For a cat whose pees are short and not
   # very still: a still stretch of duration_rule_min_still seconds counts if
-  # the cat left >= 10 g, the longest one up to duration_rule_pee_max seconds
+  # the cat left >= 10 g (duration_rule_min_still_low seconds otherwise), the longest one up to duration_rule_pee_max seconds
   # is a pee and anything longer a poop, and nothing left behind is no
   # elimination. The other cats keep the std dev rule.
   # Slot = position in the cats list above, from 0; -1 turns it off.
   duration_rule_cat: "0" # Lucy
   duration_rule_pee_max: "10" # seconds
   duration_rule_min_still: "3" # seconds
+  duration_rule_min_still_low: "5" # seconds; 2026-11-07 Lucy pee held 6.1 s, left ~1 g
 
   # Minimum duration of a clean event to be considered valid and automatically
   # reset the waste and visits counters. Used to distinguish small bumps
@@ -1453,7 +1454,7 @@ script:
           id(event_start) = millis();
           get_analyzer().init(id(cat_weights), 5);
           get_analyzer().set_duration_rule(${duration_rule_cat}, ${duration_rule_pee_max},
-                                           ${duration_rule_min_still});
+                                           ${duration_rule_min_still}, ${duration_rule_min_still_low});
           get_weight_buf().reset();
           get_analyzer().attach_buffer(&get_weight_buf());
           get_sample_idx() = 0;
