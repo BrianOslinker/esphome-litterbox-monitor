@@ -877,10 +877,17 @@ class StateAnalyzer {
 // Per event it also keeps the list of plateaus (stable ≥ 2 s) so the end-of-
 // event classifier can ask "rose monotonically, then went inert?".
 //
-// A removable lid (lid_g > 0) comes off and goes back as one step of about its
-// weight between plateaus; scooping comes out in small drops and litter pours
-// in as a ramp. Levels measured with the lid off are counted as if it were on,
-// and its state carries over between events, like absence.
+// A removable lid (lid_g > 0). Nothing a cat does takes the box below where it
+// stood with the lid on, so the lid is off once a level holds a lid's weight
+// below that (or one step of about its weight goes down). It is back on when
+// the level rises after a hard press — seating a lid pushes 2-8 kg for a
+// moment, a cat landing overshoots its weight by about 1 kg at most — and
+// either the rise is about its weight or the box then goes dead still.
+// Litter pours in as a ramp with no press. Nothing is decided with a cat on
+// the box. Levels measured with the lid off count as if it were on, and the
+// state carries over between events, like absence. While the lid is off the
+// event it came off in is held open (up to lid_hold_s), so a cleaning is
+// judged on where it started and ended.
 // ---------------------------------------------------------------------------
 
 static const int BM_MAX_PLATEAUS = 32;
@@ -913,6 +920,7 @@ struct BoxConfig {
   float inert_sigma_g = 1.0f;
   float lid_g = 0.0f;  // weight of a removable lid; 0 = no lid, nothing tracked
   float lid_tol_g = 30.0f;  // a step within this of lid_g is the lid
+  int lid_hold_s = 240;     // longest an event is held open with the lid off
 };
 
 struct BoxEvent {
@@ -934,7 +942,7 @@ class BoxMonitor {
   void configure(const BoxConfig &c) {
     cfg_ = c;
     // No lid (any more): nothing can be off, and nothing carries over.
-    if (cfg_.lid_g <= 0.0f) lid_off_ = pl_lid_off_ = ev_lid_off_ = lid_opened_ = false;
+    if (cfg_.lid_g <= 0.0f) lid_off_ = pl_lid_off_ = ev_lid_off_ = lid_opened_ = lid_on_pending_ = false;
   }
   const BoxConfig &config() const { return cfg_; }
 
@@ -956,6 +964,12 @@ class BoxMonitor {
     inert_max_ = 0;
     ev_lid_off_ = lid_off_;
     lid_opened_ = lid_off_;
+    lid_on_step_g_ = cfg_.lid_g;
+    // With the lid on, the tare is where the box stands: anything a lid's
+    // weight below it is the lid off. With it off, keep the level it left.
+    if (!lid_off_) lid_ref_g_ = base_g;
+    hold_broken_ = false;
+    lid_back_ = false;
   }
 
   /**
@@ -1003,26 +1017,60 @@ class BoxMonitor {
     return probe_slices_ % 2 ? s[k] : 0.5f * (s[k - 1] + s[k]);
   }
 
-  /** Every sample, in absolute grams, event or not. */
-  void process(float g) {
+  /**
+   * The lid came off during this event and is still off: keep the event open
+   * so the cleaning is judged as a whole, unless a cat got on or it has been
+   * off for lid_hold_s.
+   */
+  bool holding() const {
+    return cfg_.lid_g > 0.0f && lid_off_ && lid_off_n_ >= ev_start_ && !absent_ && !hold_broken_ &&
+           n_ - lid_off_n_ < cfg_.lid_hold_s * HZ;
+  }
+
+  /**
+   * Every sample, in absolute grams, event or not. `raw`: the same reading
+   * before any smoothing, if `g` is smoothed (a lid press lasts a few samples).
+   */
+  void process(float g, float raw = NAN) {
     n_++;
     win_.push(g);
+    // Between levels: the hardest press, and how long it weighed like a cat.
+    trans_max_ = std::max(trans_max_, std::isnan(raw) ? g : std::max(g, raw));
+    heavy_run_ = !std::isnan(box_level_g_) && g > box_level_g_ + CAT_PRESS_G ? heavy_run_ + 1 : 0;
+    trans_heavy_ = std::max(trans_heavy_, heavy_run_);
     if (win_.size() < WINDOW) return;
     float m = win_.mean();
     float sd = sqrtf(win_.variance());
     bool stable = sd < PLATEAU_SIGMA;
+    inert_len_ = sd < cfg_.inert_sigma_g ? inert_len_ + 1 : 0;
+    // A pressed-on lid not yet confirmed: the box must go dead still soon.
+    if (lid_on_pending_) {
+      if (pl_n_ == 0 || n_ > lid_on_deadline_) {
+        lid_on_pending_ = false;
+      } else if (inert_len_ > 0) {
+        lid_on_pending_ = false;
+        set_lid_on(lid_on_pending_d_);
+      }
+    }
 
     if (stable) {
-      if (pl_n_ == 0) pl_start_ = n_ - WINDOW;
+      if (pl_n_ == 0) {
+        pl_start_ = n_ - WINDOW;
+        pl_lid_off_ = lid_off_;
+      }
       pl_n_++;
       double d = g - pl_mean_;
       pl_mean_ += d / pl_n_;
       pl_m2_ += d * (g - pl_mean_);
-      if (pl_n_ == LID_HOLD) track_lid(static_cast<float>(pl_mean_));
+      // The lid is judged once per plateau, on its first second that holds
+      // really still: hands resting on the box make looser plateaus.
+      if (!lid_level_ok_ && pl_n_ >= LID_HOLD && sd < LID_LEVEL_SIGMA) {
+        lid_level_ok_ = true;
+        track_lid(m);
+      }
     } else if (pl_n_ > 0) {
       close_plateau();
     }
-    inert_len_ = sd < cfg_.inert_sigma_g ? inert_len_ + 1 : 0;
     // Only while something (a cat, poured litter) is on the box: the quiet
     // after a cat has left, before the event closes, is the box, not the cat.
     if (inert_len_ > inert_max_ && m - base_g_ >= cfg_.top_up_min_g) inert_max_ = inert_len_;
@@ -1043,6 +1091,7 @@ class BoxMonitor {
     // Box state. Absence latches until a stable plateau with something in
     // the box shows up again, so "off in one event, back in the next" works.
     bool absent_now = below_box(m);
+    if (absent_now) ref_stale_ = true;
     if (m < -cfg_.lift_g) {
       state_ = BoxState::LIFTED;
       saw_lifted_ = true;
@@ -1065,6 +1114,9 @@ class BoxMonitor {
         bool no_lid = std::abs(m - cfg_.box_g) >= cfg_.empty_tol_g;
         lid_off_ = pl_lid_off_ = no_lid;
         if (no_lid) lid_opened_ = true;
+        lid_ref_g_ = with_lid(static_cast<float>(pl_mean_), no_lid);
+        last_level_g_ = box_level_g_ = static_cast<float>(pl_mean_);
+        ref_stale_ = false;
         box_measured_g_ = with_lid(static_cast<float>(pl_mean_), no_lid);
         empty_pl_ = pl_count_;  // the open plateau closes into this slot
         absent_ = false;
@@ -1084,6 +1136,16 @@ class BoxMonitor {
   BoxState state() const { return state_; }
   bool absent() const { return absent_; }
   bool lid_off() const { return lid_off_; }
+  /**
+   * Once, right after the lid went back on in the event it came off in, with
+   * nothing added: the cleaning can end now rather than run into a cat that
+   * jumps in a moment later. (A top-up still waits to settle.)
+   */
+  bool take_lid_back() {
+    bool r = lid_back_;
+    lid_back_ = false;
+    return r;
+  }
 
   /**
    * True once the stability window is full and `state()` means something. Until
@@ -1124,7 +1186,7 @@ class BoxMonitor {
     r.scooped = false;
     r.longest_still_s = inert_max_ / static_cast<float>(HZ);
     r.lid_off = lid_off_;
-    r.lid_delta_g = with_lid(0.0f, ev_lid_off_) - with_lid(0.0f, lid_off_);
+    r.lid_delta_g = ev_lid_off_ == lid_off_ ? 0.0f : lid_off_ ? -cfg_.lid_g : lid_on_step_g_;
     float base = ev_base();
     float delta = r.level_g - base;
 
@@ -1201,6 +1263,30 @@ class BoxMonitor {
   static constexpr float LID_SCOOP_G = 150.0f;
   /** A lid lifted off for a moment holds still for only a second or two. */
   static constexpr int LID_HOLD = HZ;
+  /**
+   * Seating a lid presses 1.9-8.3 kg above the level it leaves (17 of 17
+   * recorded); a cat landing overshoots its own weight by 1.3 kg at most (54).
+   */
+  static constexpr float LID_PRESS_G = 1500.0f;
+  /** A lid going on that also had a scoop come out still adds at least this. */
+  static constexpr float LID_ON_MIN_G = 200.0f;
+  /** ...and the box goes dead still within this many samples of the new level. */
+  static constexpr int LID_STILL_WITHIN = 9 * HZ;
+  /** A level this far above the lid-on box has a cat on it. */
+  static constexpr float CAT_G = 2000.0f;
+  /**
+   * Weighing this much more than the box for over CAT_PRESS_N samples between
+   * two levels: a cat, not a hand (leaning on the box while scooping has held
+   * it there for 4 s).
+   */
+  static constexpr float CAT_PRESS_G = 2500.0f;
+  static constexpr int CAT_PRESS_N = 8 * HZ;
+  /** A level the lid is judged from holds within this (1 s spread). */
+  static constexpr float LID_LEVEL_SIGMA = 4.0f;
+  /** A lid set down goes from one level to the next within this; a pour takes longer. */
+  static constexpr int LID_QUICK = 25;
+  /** A cat gets on within this; a pour takes longer. */
+  static constexpr int CAT_JUMP = 30;
 
   BoxConfig cfg_{};
   Ring win_{WINDOW};
@@ -1241,9 +1327,25 @@ class BoxMonitor {
   bool lid_off_ = false;
   bool pl_lid_off_ = false;   // lid state of the open plateau
   float last_level_g_ = NAN;  // last level held LID_HOLD with the box on the board
-  float lid_ref_g_ = NAN;     // the level just before the lid came off
+  float lid_ref_g_ = NAN;     // where the box stands with the lid on (the level it came off from)
   bool ev_lid_off_ = false;   // lid state when the event began
   bool lid_opened_ = false;   // the lid was off at some point this event
+  int lid_off_n_ = -1;        // sample the lid was last seen coming off
+  float lid_on_step_g_ = 0.0f;  // what the lid added going back on
+  float trans_max_ = -INFINITY;  // hardest press since the last level
+  int trans_heavy_ = 0;          // longest run weighing like a cat since the last level
+  int heavy_run_ = 0;
+  bool lid_level_ok_ = false;    // the open plateau held still enough and the lid was judged on it
+  bool lid_on_pending_ = false;  // pressed on, waiting for the box to go still
+  float lid_on_pending_d_ = 0.0f;
+  int lid_on_deadline_ = 0;
+  bool hold_broken_ = false;     // a cat got on while the event was held open
+  bool lid_back_ = false;        // the lid just went back on: the cleaning can end
+  bool ref_stale_ = false;       // the box was away: re-learn the levels when it is back
+  int last_level_end_n_ = 0;     // sample the last level ended
+  bool pl_cat_ = false;          // the open plateau has a cat on it
+  float box_level_g_ = NAN;      // the latest still level with no cat on
+  bool prev_cat_ = false;        // the last level judged had a cat on it
   BoxEvent result_{};
 
   /** Below anything the box can weigh: it is off the board (or the board is in the air). */
@@ -1261,22 +1363,73 @@ class BoxMonitor {
     return cfg_.lid_g > 0.0f && std::abs(g + cfg_.lid_g - cfg_.box_g) < cfg_.empty_tol_g;
   }
 
-  /** Once per plateau, when it has held LID_HOLD: did the lid just come off or go back? */
+  void set_lid_on(float d) {
+    // Off and back on within this event, nothing added: the cleaning is over.
+    lid_back_ = lid_off_n_ >= ev_start_ &&
+                with_lid(static_cast<float>(pl_mean_), false) - ev_base() < cfg_.top_up_min_g;
+    lid_off_ = pl_lid_off_ = false;
+    // What it actually added back, if that looks like the lid alone.
+    lid_on_step_g_ = std::abs(d - cfg_.lid_g) <= cfg_.lid_tol_g ? d : cfg_.lid_g;
+    lid_ref_g_ = static_cast<float>(pl_mean_);
+  }
+
+  /** Once per plateau, on its first still second: did the lid just come off or go back? */
   void track_lid(float g) {
     pl_lid_off_ = lid_off_;
-    if (cfg_.lid_g <= 0.0f || below_box(g) || std::isnan(last_level_g_)) return;
+    int trans_len = pl_start_ - last_level_end_n_;
+    if (ref_stale_ && !below_box(g)) {
+      // Back from being away: start over from here, lid as it was.
+      ref_stale_ = false;
+      lid_ref_g_ = with_lid(g, lid_off_);
+      last_level_g_ = box_level_g_ = g;
+      trans_max_ = g;
+      trans_heavy_ = 0;
+      last_level_end_n_ = n_;
+      return;
+    }
+    float press = trans_max_ - g;
+    // With the lid on, anything well above the box is a cat. With it off,
+    // litter can be poured in: a cat jumps on (2 kg or more in a few
+    // seconds) and stays a cat until the box is back near where it was;
+    // a pour climbs for longer and then is just the box, heavier.
+    float rise = std::isnan(last_level_g_) ? 0.0f : g - last_level_g_;
+    bool cat = trans_heavy_ > CAT_PRESS_N ||
+               (!lid_off_ ? !std::isnan(lid_ref_g_) && g > lid_ref_g_ + CAT_G
+                          : rise > CAT_G && (trans_len <= CAT_JUMP || prev_cat_));
+    pl_cat_ = prev_cat_ = cat;
+    heavy_run_ = 0;
+    if (!cat) box_level_g_ = g;
+    trans_max_ = g;
+    trans_heavy_ = 0;
+    // A cat got in with the lid off: from here the event ends as a visit does.
+    if (cat && lid_off_ && lid_off_n_ >= ev_start_) hold_broken_ = true;
+    if (cfg_.lid_g <= 0.0f || below_box(g) || std::isnan(last_level_g_) || cat) return;
     float d = g - last_level_g_;
     float tol = cfg_.lid_tol_g;
-    if (!lid_off_ && d <= -(cfg_.lid_g - tol) && d >= -(cfg_.lid_g + tol + LID_SCOOP_G)) {
-      lid_off_ = true;
-      lid_ref_g_ = last_level_g_;
-    } else if (lid_off_ && (std::abs(d - cfg_.lid_g) <= tol ||
-                            // back to the level it left with the lid on: a missed step
-                            std::abs(g - lid_ref_g_) <= tol)) {
-      lid_off_ = false;
+    if (!lid_off_) {
+      bool step = d <= -(cfg_.lid_g - tol) && d >= -(cfg_.lid_g + tol + LID_SCOOP_G);
+      // The first level may still have the lid resting on the box or a hand
+      // on it; once one holds a lid's weight below the start, it is off.
+      bool below = !std::isnan(lid_ref_g_) && g <= lid_ref_g_ - (cfg_.lid_g - tol);
+      if (step || below) {
+        lid_off_ = pl_lid_off_ = lid_opened_ = true;
+        lid_off_n_ = n_;
+        if (std::isnan(lid_ref_g_)) lid_ref_g_ = last_level_g_;
+      }
+    } else if ((d >= LID_ON_MIN_G && press >= LID_PRESS_G) ||
+               // Set down gently: no press, but a lid-sized step in a moment
+               // (a pour takes longer), and the box then goes dead still.
+               (std::abs(d - cfg_.lid_g) <= tol && trans_len <= LID_QUICK)) {
+      // Pressed on and about its weight: the lid. Otherwise (a scoop went
+      // with it, or no press): the lid once the box goes still.
+      if (std::abs(d - cfg_.lid_g) <= tol && press >= LID_PRESS_G) {
+        set_lid_on(d);
+      } else {
+        lid_on_pending_ = true;
+        lid_on_pending_d_ = d;
+        lid_on_deadline_ = n_ + LID_STILL_WITHIN;
+      }
     }
-    pl_lid_off_ = lid_off_;
-    if (lid_off_) lid_opened_ = true;
   }
 
   /** Lowest plateau since the box was last away: where a pour starts from. */
@@ -1299,11 +1452,16 @@ class BoxMonitor {
       else
         pl_overflow_ = true;
     }
-    if (pl_n_ >= LID_HOLD && !below_box(static_cast<float>(pl_mean_)))
+    // A cat sitting still is not a level the lid moves from.
+    if (pl_n_ >= LID_HOLD && lid_level_ok_ && !pl_cat_ && !below_box(static_cast<float>(pl_mean_))) {
       last_level_g_ = static_cast<float>(pl_mean_);
+      last_level_end_n_ = n_;
+    }
     pl_n_ = 0;
     pl_mean_ = 0.0;
     pl_m2_ = 0.0;
+    lid_level_ok_ = false;
+    pl_cat_ = false;
   }
 
   float current_level() const {

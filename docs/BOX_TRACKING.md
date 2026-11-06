@@ -102,27 +102,59 @@ event ends while the lid is off, the scale tares there and the lid going
 back on lands in Waste Weight.
 
 Set the lid's weight in Lid Weight, next to Empty Box Weight (0, the
-default, is no lid). Empty Box Weight is then the box with its lid on. The
-lid comes off and goes back as one step of about that weight between steady
-levels, where a scoop comes out in small drops and litter pours in as a
-ramp, so a step within `lid_tolerance` (30 g) of it is the lid. A lid's
-weight doesn't change the way a cat's does, so the window is fixed, like the
-empty box's, rather than a share of it. Every level measured with the lid
-off is counted as if it were on, the lid's state carries over into the next
-event, and taking it off counts as opening the box, like lifting the box off
-(no minimum duration for a scoop). An empty box also counts for a deep clean
-with its lid on or off.
+default, is no lid). Empty Box Weight is then the box with its lid on.
 
-The lid has to sit still, off or on, for about two seconds to be seen: a
-lid lifted and put straight back is just a wobble, which is harmless. Keep
-the box and lid clear of walls: a lid catching on one moved the reading by
-up to 30 g, where clear of it the level with the lid on came back within a
-couple of grams.
+**Seeing the lid.** Weight alone can't tell a lid from a scoop by the drop
+(hands lifting a scoop out fall as fast), but several things together can:
+
+- **Off:** nothing a cat does takes the box below where it stood with the lid
+  on. So the lid is off once a steady level holds a lid's weight below that
+  (within `lid_tolerance`), or one step of about its weight goes down. The
+  first level after lifting it is often short, with the lid still touching
+  the box or a hand on it; the later one counts.
+- **On:** the level rises after a hard press. Seating a lid pushes 2-8 kg
+  for a moment; a cat landing overshoots its own weight by about 1 kg at
+  most, and poured litter has no press. The rise must be about the lid's
+  weight, or, when a scoop went with it, at least 200 g with the box going
+  dead still (1 s under 1 g) within 9 s. A lid set down gently, with no
+  press, still counts if the rise is about its weight, takes under 2.5 s
+  (a pour takes longer) and the box then goes dead still.
+- **Not with a cat on:** nothing is decided while a cat is on the box. With
+  the lid on, that is anything 2 kg above it. With the lid off, litter can
+  be poured in too, so a cat is a rise of 2 kg or more within 3 s (a pour
+  climbs for longer), until the box is back near where it was.
+- **After the box was away** (a deep clean), the levels from before mean
+  nothing: the first still level back is the new reference, with the lid as
+  it was. An empty box back without its lid is a deep clean and marks the
+  lid off.
+
+"Steady" here means a second under 4 g of spread, tighter than the plateaus
+the verdict uses, so hands resting on the box don't read as steps.
+
+**Holding the event open.** While the lid is off, the event it came off in
+stays open, so a cleaning is judged as a whole on where it started and
+ended, however long you pause. It closes as soon as the lid is back on (so a
+cat that jumps straight in gets a visit of its own), unless litter went in,
+which still waits to settle as a top-up. It also closes when a cat gets in,
+or after `lid_hold_time` (240 s). A lid left off longer than that stays
+counted as off, through any visits, until it is seen going back on.
+
+Not handled yet: a cat getting in while the lid is still off and the event
+is held. The cleaning and the visit end up as one event, and the scoop is
+lost. After a restart the lid is assumed to be on.
+
+Every level measured with the lid off is counted as if it were on, taking it
+off counts as opening the box (no minimum duration for a scoop), and putting
+it back is not waste: the step it actually added is taken out, when that is
+within `lid_tolerance` of Lid Weight. 
+
+Keep the box and lid clear of walls: a lid catching on one moved the reading
+by up to 30 g.
 
 All thresholds are substitutions at the top of the YAML:
 `box_off_tolerance`, `box_empty_tolerance`, `monitor_lift_threshold`,
 `lift_return_tolerance`, `min_top_up_weight`, `top_up_settle_time`,
-`lid_tolerance`, plus `min_clean_event_weight` and `min_clean_event_duration`
+`lid_tolerance`, `lid_hold_time`, plus `min_clean_event_weight` and `min_clean_event_duration`
 for scoops.
 
 ## Troubleshooting
