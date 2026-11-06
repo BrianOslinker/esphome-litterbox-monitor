@@ -111,6 +111,15 @@ class Ring {
     return s / static_cast<float>(filled_);
   }
 
+  // Median of the filled slots (mean of the middle two for an even count).
+  float median() const {
+    if (!filled_) return 0.0f;
+    float tmp[MAX_RING];
+    memcpy(tmp, buf_, sizeof(float) * filled_);
+    std::sort(tmp, tmp + filled_);
+    return filled_ % 2 ? tmp[filled_ / 2] : 0.5f * (tmp[filled_ / 2 - 1] + tmp[filled_ / 2]);
+  }
+
   // Sample variance (divides by n-1)
   float variance() const {
     if (filled_ < 2) return 0.0f;
@@ -498,7 +507,10 @@ class StateAnalyzer {
             transition_to(AnalyzerState::ENTERING);
           }
         } else if (gap_cnt_ > REENTRY_WIN) {
-          waste_weight_ = static_cast<float>(weight);
+          // Median of the last second: one garbled HX711 read must not
+          // decide the waste (6 Nov 19:19, a -2010 g read turned a pee
+          // into -184 g and no elimination).
+          waste_weight_ = window_.median();
           waste_set_ = true;
           return;
         }
@@ -522,9 +534,10 @@ class StateAnalyzer {
     // The event usually closes a few seconds after the cat leaves, well
     // before REENTRY_WIN, so the GAP branch never gets to set the waste.
     // What the scale settled on over the last second of that gap is the
-    // same thing end_event tares away, so take it from there.
+    // same thing end_event tares away, so take it from there (its median,
+    // so a single glitched read can't swing it).
     if (state_ == AnalyzerState::GAP && current_sample_ - state_start_ >= WINDOW) {
-      waste_weight_ = window_.mean();
+      waste_weight_ = window_.median();  // not mean: see the GAP branch
       waste_set_ = true;
     }
     // No cat, nothing to measure from: report against the tare, as before.
