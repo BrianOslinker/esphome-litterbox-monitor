@@ -407,6 +407,28 @@ class StateAnalyzer {
 
     current_weight_g_ = weight;
     current_sample_ = index;
+    // Local: drop single garbled HX711 reads. One under the 4 kg spike filter
+    // (−2 kg on 2026-11-06 19:19; 1–3 a day) breaks a still stretch for a
+    // second, enough to cut a 5–8 s squat short. Judge each reading one
+    // sample late: if it sits far from both neighbours while they agree, use
+    // their mean instead. Only true one-sample glitches change — a plain
+    // median of three also smooths a cat's wobble, makes it look still for
+    // longer and shifted 6 of 181 replayed verdicts (thresholds were tuned
+    // on raw readings). The buffer still records the raw reading, so replays
+    // filter the same way. 100 ms of delay.
+    {
+      float g = weight;
+      if (std::isnan(med_d1_)) {
+        weight = g;
+      } else {
+        weight = med_d1_;
+        if (!std::isnan(med_d2_) && std::abs(g - med_d2_) <= GLITCH_PAIR_G &&
+            std::abs(med_d1_ - 0.5f * (g + med_d2_)) > GLITCH_G)
+          weight = 0.5f * (g + med_d2_);
+      }
+      med_d2_ = med_d1_;
+      med_d1_ = g;
+    }
     // Everything below is measured from what sat on the box just before the
     // cat got in. current_weight_g_ stays raw: the weight buffer's zones are.
     track_pre_entry(weight);
@@ -595,6 +617,8 @@ class StateAnalyzer {
     pre_still_ = 0;
     cat_seen_ = false;
     waste_set_ = false;
+    med_d1_ = NAN;
+    med_d2_ = NAN;
   }
 
   AnalyzerState current_state() const { return state_; }
@@ -672,6 +696,12 @@ class StateAnalyzer {
   int pre_still_ = 0;
   bool cat_seen_ = false;  // OCCUPIED reached: the baseline is frozen
   bool waste_set_ = false;
+  float med_d1_ = NAN;  // previous two raw readings, for the glitch check
+  float med_d2_ = NAN;
+  // A glitch: the reading sits over GLITCH_G from its neighbours' mean while
+  // they agree within GLITCH_PAIR_G. Cat jolts span several samples.
+  static constexpr float GLITCH_G = 250.0f;
+  static constexpr float GLITCH_PAIR_G = 40.0f;
   WeightBuffer *wbuf_ = nullptr;
   StateTransition txs_[SA_MAX_TRANSITIONS];
   int tx_count_ = 0;
