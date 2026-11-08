@@ -77,6 +77,13 @@ substitutions:
   # window, like box_empty_tolerance. A lid catching on a wall can throw a
   # step off by tens of grams.
   lid_tolerance: "30" # g
+  # A visit that ends this far below where it started, with no lid, scoop or
+  # lift to explain it, had part of the box's weight held off the load cells:
+  # the visit isn't counted and the zero stays where it was, for up to
+  # low_end_hold_s while the reading recovers. Real visits end at most a few
+  # grams low (worst of 68 journaled: -184 g, one glitched read).
+  low_end_weight: "0.3" # kg
+  low_end_hold_s: "1800"
 
   # With the lid off, the event it came off in stays open until it goes back
   # on (or a cat gets in), so a cleaning is judged on where it started and
@@ -195,6 +202,11 @@ globals:
   
   ## Scale calibration parameters
   
+  # millis() when a low-ending visit first held the tare; 0 = not holding
+  - id: low_hold_ms
+    type: uint32_t
+    initial_value: "0"
+
   # Auto-tare at event end
   - id: tare_value
     type: float # kg
@@ -1553,6 +1565,20 @@ script:
           bool lid_before_cat = pre_entry_g * box.lid_delta_g > 0.0f &&
                                 fabsf(pre_entry_g) >= fabsf(box.lid_delta_g) - ${lid_tolerance};
           if (!lid_before_cat) end_tared_kg -= box.lid_delta_g / 1000.0f;
+          // A visit can't leave the box lighter: the box is closed and a cat
+          // takes nothing out. Ending well below the start with no lid, scoop
+          // or lift to explain it means part of the load was held off the
+          // cells (8 Nov 21:41: Osiris read 5.8 kg and was taken for Lucy,
+          // then the box sat 1.3 kg low for minutes and crept back). The
+          // visit's weights can't be trusted and the low reading is not the
+          // new zero. Catless events keep the hold while it lasts.
+          bool held_low = id(low_hold_ms) != 0 && millis() - id(low_hold_ms) < ${low_end_hold_s} * 1000UL;
+          bool low_end = box.kind == BoxEventKind::NONE && !box.absent && box.lid_delta_g == 0.0f &&
+                         end_tared_kg < -${low_end_weight} && (cat_event || continued || held_low);
+          if (low_end) {
+            ESP_LOGW("SA", "Ended %.0f g below its start with nothing to explain it: not counted, zero held",
+                     -end_tared_kg * 1000.0f);
+          }
           float zero_g = box.zero_valid ? box.zero_error_g : 0.0f;
           float zero_kg = zero_g / 1000.0f;
           float level_kg = (box.level_g - zero_g) / 1000.0f;
@@ -1586,7 +1612,7 @@ script:
               }
             }
 
-            if (cat_event) {
+            if (cat_event && !low_end) {
               int ci = result.detected_cat;
               if (result.cat_weight > 0.0f) {
                 id(cat_weights)[ci] = result.cat_weight / 1000.0f;
@@ -1695,7 +1721,7 @@ script:
             // A visit is a recognised cat, counted once: in the event that
             // recognised it, also when the timeout closed that with the cat
             // still inside (the event after is it leaving).
-            if (cat_event && !continued) {
+            if (cat_event && !continued && !low_end) {
               id(visits).publish_state(id(visits).state + 1);
             }
           }
@@ -1717,10 +1743,14 @@ script:
             ESP_LOGI("BOX", "Box away, tare held");
           } else if (cat_inside) {
             id(suppress_visit) = true;
+          } else if (low_end) {
+            if (id(low_hold_ms) == 0) id(low_hold_ms) = millis() | 1;
+            id(suppress_visit) = false;
           } else {
             id(tare_value) = id(hx711_raw_value).state - zero_kg;
             id(auto_tare_value) = 0;
             id(suppress_visit) = false;
+            id(low_hold_ms) = 0;
           }
 
           id(cat_detected).publish_state(false);
@@ -1743,6 +1773,7 @@ script:
           blob_end.samples = samples;
           blob_end.long_enough = long_enough;
           blob_end.continued = continued;
+          blob_end.low_end = low_end;
           blob_end.visit = visit;
           blob_end.box = &box;
           blob_end.project = ESPHOME_PROJECT_NAME;

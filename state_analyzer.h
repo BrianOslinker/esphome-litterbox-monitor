@@ -983,6 +983,7 @@ struct BoxEvent {
   float longest_still_s;  // longest inert stretch with something on the box
   bool lid_off;          // the lid is off at the end (level_g counts it anyway)
   float lid_delta_g;     // what the lid did to the weight: +lid_g put back, -lid_g taken off
+  bool lid_healed;       // it was taken for off, but the box was back at its lid-on level
 };
 
 class BoxMonitor {
@@ -1018,6 +1019,7 @@ class BoxMonitor {
     if (!lid_off_) lid_ref_g_ = base_g;
     hold_broken_ = false;
     lid_back_ = false;
+    lid_healed_ = false;
   }
 
   /**
@@ -1223,6 +1225,20 @@ class BoxMonitor {
     bool ended_stable = pl_n_ >= MIN_PLATEAU;
     bool ended_inert = inert_len_ >= cfg_.settle_s * HZ;
     if (ended_stable) close_plateau();
+    // The lid is "off" but the box stands where it did with the lid on, and
+    // nothing went in: the lid never came off (or went back on unseen). With
+    // it off the box sits a lid's weight lower, and nothing a cat does lifts
+    // it back. Without this a missed lid-on stays wrong until the next
+    // cleaning (8 Nov: off from 11:48 on with the box back at its level).
+    if (cfg_.lid_g > 0.0f && lid_off_ && !absent_ && !deep_clean_ && !std::isnan(lid_ref_g_)) {
+      float actual = pl_count_ > 0 ? pl_[pl_count_ - 1].mean_g : win_.mean();
+      if (actual >= lid_ref_g_ - (cfg_.lid_g - cfg_.lid_tol_g) &&
+          actual <= lid_ref_g_ + cfg_.top_up_min_g) {
+        lid_off_ = pl_lid_off_ = ev_lid_off_ = lid_on_pending_ = false;
+        for (int i = 0; i < pl_count_; i++) pl_[i].lid_off = false;
+        lid_healed_ = true;
+      }
+    }
     BoxEvent &r = result_;
     r.kind = BoxEventKind::NONE;
     r.level_g = pl_count_ > 0 ? level(pl_count_ - 1) : with_lid(win_.mean(), lid_off_);
@@ -1234,6 +1250,7 @@ class BoxMonitor {
     r.scooped = false;
     r.longest_still_s = inert_max_ / static_cast<float>(HZ);
     r.lid_off = lid_off_;
+    r.lid_healed = lid_healed_;
     r.lid_delta_g = ev_lid_off_ == lid_off_ ? 0.0f : lid_off_ ? -cfg_.lid_g : lid_on_step_g_;
     float base = ev_base();
     float delta = r.level_g - base;
@@ -1389,6 +1406,7 @@ class BoxMonitor {
   int lid_on_deadline_ = 0;
   bool hold_broken_ = false;     // a cat got on while the event was held open
   bool lid_back_ = false;        // the lid just went back on: the cleaning can end
+  bool lid_healed_ = false;      // finalize found the lid on after all
   bool ref_stale_ = false;       // the box was away: re-learn the levels when it is back
   int last_level_end_n_ = 0;     // sample the last level ended
   bool pl_cat_ = false;          // the open plateau has a cat on it
@@ -1458,8 +1476,18 @@ class BoxMonitor {
       bool step = d <= -(cfg_.lid_g - tol) && d >= -(cfg_.lid_g + tol + LID_SCOOP_G);
       // The first level may still have the lid resting on the box or a hand
       // on it; once one holds a lid's weight below the start, it is off.
-      bool below = !std::isnan(lid_ref_g_) && g <= lid_ref_g_ - (cfg_.lid_g - tol);
-      if (step || below) {
+      // Straight down from the lid-on level in one step, only a lid's worth
+      // (plus a first scoopful) counts: more than that at once is something
+      // else coming off, such as a weight set on the lid and lifted away
+      // again (8 Nov: 1092 g off read as lid off + scoop). Via a level in
+      // between (a hand still on the box, 21 Oct) it can be any amount.
+      bool from_ref = !std::isnan(lid_ref_g_) && std::abs(last_level_g_ - lid_ref_g_) <= LEVEL_TOL;
+      bool below = !std::isnan(lid_ref_g_) && g <= lid_ref_g_ - (cfg_.lid_g - tol) &&
+                   (!from_ref || g >= lid_ref_g_ - (cfg_.lid_g + tol + LID_SCOOP_G));
+      if (from_ref && g < lid_ref_g_ - (cfg_.lid_g + tol + LID_SCOOP_G)) {
+        // Something else came off with the lid still on: it stands here now.
+        lid_ref_g_ = g;
+      } else if (step || below) {
         lid_off_ = pl_lid_off_ = lid_opened_ = true;
         lid_off_n_ = n_;
         if (std::isnan(lid_ref_g_)) lid_ref_g_ = last_level_g_;
