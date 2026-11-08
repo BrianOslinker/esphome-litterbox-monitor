@@ -61,7 +61,8 @@ struct BlobEnd {
   int samples;    // accepted samples (sample index at the end)
   bool long_enough;
   bool continued;
-  bool low_end = false;  // ended well below its start with nothing to explain it: tare held
+  bool low_end = false;    // ended well below its start with nothing to explain it: not counted
+  float recovered_g = 0.0f;  // came back up this much to where it stood before a low end: not waste
   const StateResult *visit;  // null when not long enough
   const BoxEvent *box;
   const char *project;
@@ -205,10 +206,10 @@ class VisitRecorder {
 
     const BoxEvent &bx = *e.box;
     w.printf("\"box\":{\"kind\":\"%s\",\"level\":%.9g,\"added\":%.9g,\"box\":%.9g,"
-             "\"zero_valid\":%s,\"zero\":%.9g,\"absent\":%s,\"scooped\":%s,\"lid_off\":%s,\"lid_delta\":%.9g,\"lid_healed\":%s,\"low_end\":%s},",
+             "\"zero_valid\":%s,\"zero\":%.9g,\"absent\":%s,\"scooped\":%s,\"lid_off\":%s,\"lid_delta\":%.9g,\"lid_healed\":%s,\"low_end\":%s,\"recovered_g\":%.9g},",
              box_event_str(bx.kind), bx.level_g, bx.litter_added_g, bx.box_measured_g, b(bx.zero_valid),
              bx.zero_error_g, b(bx.absent), b(bx.scooped), b(bx.lid_off), bx.lid_delta_g,
-             b(bx.lid_healed), b(e.low_end));
+             b(bx.lid_healed), b(e.low_end), e.recovered_g);
 
     w.printf("\"config\":{\"cat_weights\":[");
     for (int i = 0; i < SA_MAX_CATS; i++) w.printf(i ? ",%.9g" : "%.9g", c.cat_weights_kg[i]);

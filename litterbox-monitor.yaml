@@ -79,9 +79,11 @@ substitutions:
   lid_tolerance: "30" # g
   # A visit that ends this far below where it started, with no lid, scoop or
   # lift to explain it, had part of the box's weight held off the load cells:
-  # the visit isn't counted and the zero stays where it was, for up to
-  # low_end_hold_s while the reading recovers. Real visits end at most a few
-  # grams low (worst of 68 journaled: -184 g, one glitched read).
+  # the visit isn't counted. The scale is zeroed where it now reads, so the
+  # next visits are weighed right, but for up to low_end_hold_s the old zero
+  # is remembered: when the reading comes back up to it, that is the box
+  # recovering, not waste or litter. Real visits end at most a few grams low
+  # (worst of 68 journaled: -184 g, one glitched read).
   low_end_weight: "0.3" # kg
   low_end_hold_s: "1800"
 
@@ -202,10 +204,14 @@ globals:
   
   ## Scale calibration parameters
   
-  # millis() when a low-ending visit first held the tare; 0 = not holding
+  # millis() when a low-ending visit started the hold; 0 = not holding
   - id: low_hold_ms
     type: uint32_t
     initial_value: "0"
+  # While holding: the raw reading (kg) the box stood at before it went low
+  - id: low_ref_kg
+    type: float
+    initial_value: "0.0"
 
   # Auto-tare at event end
   - id: tare_value
@@ -1570,13 +1576,34 @@ script:
           // or lift to explain it means part of the load was held off the
           // cells (8 Nov 21:41: Osiris read 5.8 kg and was taken for Lucy,
           // then the box sat 1.3 kg low for minutes and crept back). The
-          // visit's weights can't be trusted and the low reading is not the
-          // new zero. Catless events keep the hold while it lasts.
+          // visit's weights can't be trusted. The scale is zeroed where it
+          // reads now (so the next visit is weighed from there), and the old
+          // zero is kept for low_end_hold_s: coming back up to it is the box
+          // recovering, not waste or litter (21:43 counted 1.3 kg of waste).
           bool held_low = id(low_hold_ms) != 0 && millis() - id(low_hold_ms) < ${low_end_hold_s} * 1000UL;
+          if (id(low_hold_ms) != 0 && !held_low) {
+            ESP_LOGI("SA", "Low hold expired: the lower level stands");
+            id(low_hold_ms) = 0;
+          }
+          // How far below the old zero the current zero is (kg, > 0).
+          float hold_off_kg = held_low ? id(low_ref_kg) - id(tare_value) - id(auto_tare_value) : 0.0f;
           bool low_end = box.kind == BoxEventKind::NONE && !box.absent && box.lid_delta_g == 0.0f &&
                          end_tared_kg < -${low_end_weight} && (cat_event || continued || held_low);
+          // Back within low_end_weight of the old zero: the box recovered.
+          bool recovered = held_low && !box.absent && hold_off_kg > ${low_end_weight} &&
+                           fabsf(id(weight_value).state - hold_off_kg) < ${low_end_weight};
+          // The recovery is not litter, unless more than that went in.
+          BoxEventKind kind = box.kind;
+          if (recovered && kind == BoxEventKind::TOP_UP &&
+              box.litter_added_g < hold_off_kg * 1000.0f + ${min_top_up_weight}) {
+            kind = BoxEventKind::NONE;
+          }
+          if (recovered) {
+            end_tared_kg -= hold_off_kg;
+            ESP_LOGI("SA", "Back up %.0f g to where it stood before it went low: not waste", hold_off_kg * 1000.0f);
+          }
           if (low_end) {
-            ESP_LOGW("SA", "Ended %.0f g below its start with nothing to explain it: not counted, zero held",
+            ESP_LOGW("SA", "Ended %.0f g below its start with nothing to explain it: not counted",
                      -end_tared_kg * 1000.0f);
           }
           float zero_g = box.zero_valid ? box.zero_error_g : 0.0f;
@@ -1584,7 +1611,7 @@ script:
           float level_kg = (box.level_g - zero_g) / 1000.0f;
           float box_kg = id(litterbox_weight).state / 1000.0f;
           ESP_LOGI("BOX", "Event: %s level=%.0fg added=%.0fg box=%.0fg zero=%.0fg%s absent=%d lid=%s%+.0fg",
-                   box_event_str(box.kind), box.level_g, box.litter_added_g,
+                   box_event_str(kind), box.level_g, box.litter_added_g,
                    box.box_measured_g, zero_g, box.zero_valid ? "" : " (unchecked)",
                    (int) box.absent, box.lid_off ? "off" : "on", box.lid_delta_g);
           id(still_stretch).publish_state(box.longest_still_s);
@@ -1592,12 +1619,13 @@ script:
           // Maintenance outranks the visit analysis: a bag that happens to
           // weigh what a cat does matches the cat by weight, but it went
           // inert, and that is the stronger evidence.
-          if (visit != nullptr && box.kind == BoxEventKind::NONE) {
+          if (visit != nullptr && kind == BoxEventKind::NONE) {
             const StateResult &result = *visit;
             // A continued event is the second half of a visit the timeout
             // split: the cat leaving. It only adds waste; the result stays the
             // first half's, which the daily counts were taken from.
-            if (!continued) {
+            // A low-ending visit isn't a visit anyone can trust: no verdict.
+            if (!continued && !low_end) {
               id(elimination_type_sensor).publish_state(
                   elimination_type_str(result.elimination_type));
               id(event_duration_sensor).publish_state(duration);
@@ -1632,10 +1660,10 @@ script:
                        ci + 1, id(cat_weights)[ci], id(cat_daily_visits)[ci]);
             }
           } else if (cat_event) {
-            ESP_LOGI("SA", "Cat match dropped: the event was a %s", box_event_str(box.kind));
+            ESP_LOGI("SA", "Cat match dropped: the event was a %s", box_event_str(kind));
           }
 
-          switch (box.kind) {
+          switch (kind) {
             case BoxEventKind::DEEP_CLEAN: {
               // The box just weighed itself empty, which beats the setting.
               // Detection only fires within box_empty_tolerance of it, so
@@ -1683,7 +1711,7 @@ script:
           // A refill past what counts as full means "full" was set low: raise
           // it rather than report more than 100%. Never lowered here.
           float full_kg = id(litter_full_weight).state;
-          if ((box.kind == BoxEventKind::TOP_UP || box.kind == BoxEventKind::DEEP_CLEAN) &&
+          if ((kind == BoxEventKind::TOP_UP || kind == BoxEventKind::DEEP_CLEAN) &&
               full_kg > 0.0f && id(litter_weight).state > full_kg) {
             auto call = id(litter_full_weight).make_call();
             call.set_value(ceilf(id(litter_weight).state * 10.0f) / 10.0f);  // the entity's 0.1 kg step
@@ -1700,7 +1728,7 @@ script:
           bool cat_inside = false;
           // With the box off the board there is nothing to judge a visit
           // or waste by: taking it away is maintenance, not a cat.
-          if (box.kind == BoxEventKind::NONE && long_enough && !box.absent) {
+          if (kind == BoxEventKind::NONE && long_enough && !box.absent) {
             float min_cat_kg = 0.0f;
             for (int i = 0; i < 5; i++) {
               float w = id(cat_weights)[i];
@@ -1743,19 +1771,25 @@ script:
             ESP_LOGI("BOX", "Box away, tare held");
           } else if (cat_inside) {
             id(suppress_visit) = true;
-          } else if (low_end) {
-            if (id(low_hold_ms) == 0) id(low_hold_ms) = millis() | 1;
-            id(suppress_visit) = false;
           } else {
+            if (low_end) {
+              // Remember where it stood before (the first time only: a second
+              // sink in the hold keeps the original level).
+              if (!held_low) id(low_ref_kg) = id(tare_value) + id(auto_tare_value);
+              id(low_hold_ms) = millis() | 1;
+            } else if (recovered || kind != BoxEventKind::NONE) {
+              // Back where it was, or the box was worked on: the old zero
+              // means nothing any more.
+              id(low_hold_ms) = 0;
+            }
             id(tare_value) = id(hx711_raw_value).state - zero_kg;
             id(auto_tare_value) = 0;
             id(suppress_visit) = false;
-            id(low_hold_ms) = 0;
           }
 
           id(cat_detected).publish_state(false);
-          if (box.kind != BoxEventKind::NONE) {
-            id(maintenance_event).trigger(box_event_str(box.kind));
+          if (kind != BoxEventKind::NONE) {
+            id(maintenance_event).trigger(box_event_str(kind));
           }
 
           // Finish the visit's journal entry: the last samples still in RAM,
@@ -1774,6 +1808,7 @@ script:
           blob_end.long_enough = long_enough;
           blob_end.continued = continued;
           blob_end.low_end = low_end;
+          blob_end.recovered_g = recovered ? hold_off_kg * 1000.0f : 0.0f;
           blob_end.visit = visit;
           blob_end.box = &box;
           blob_end.project = ESPHOME_PROJECT_NAME;
@@ -1816,6 +1851,7 @@ script:
           // visit cannot open one.
           get_visit_store().discard();
           id(suppress_visit) = false;
+          id(low_hold_ms) = 0;
           id(cat_detected).publish_state(false);
           id(tare_value) = id(hx711_raw_value).state;
           id(auto_tare_value) = 0;

@@ -1012,7 +1012,10 @@ class BoxMonitor {
     inert_len_ = 0;
     inert_max_ = 0;
     ev_lid_off_ = lid_off_;
-    lid_opened_ = lid_off_;
+    // Only a lid that comes off or goes on in this event waives the scoop
+    // minimum: one left off from before says nothing about this event (8 Nov:
+    // with the lid taken for off, 8 s sags of 50-150 g were scoops).
+    lid_opened_ = false;
     lid_on_step_g_ = cfg_.lid_g;
     // With the lid on, the tare is where the box stands: anything a lid's
     // weight below it is the lid off. With it off, keep the level it left.
@@ -1164,6 +1167,7 @@ class BoxMonitor {
         bool no_lid = std::abs(m - cfg_.box_g) >= cfg_.empty_tol_g;
         lid_off_ = pl_lid_off_ = no_lid;
         if (no_lid) lid_opened_ = true;
+        lid_off_filled_ = false;
         lid_ref_g_ = with_lid(static_cast<float>(pl_mean_), no_lid);
         last_level_g_ = box_level_g_ = static_cast<float>(pl_mean_);
         ref_stale_ = false;
@@ -1225,6 +1229,14 @@ class BoxMonitor {
     bool ended_stable = pl_n_ >= MIN_PLATEAU;
     bool ended_inert = inert_len_ >= cfg_.settle_s * HZ;
     if (ended_stable) close_plateau();
+    // Litter poured in with the lid off (this event or an earlier one): the
+    // box can then stand at its lid-on level with the lid still off.
+    if (cfg_.lid_g > 0.0f && lid_off_ && ended_inert) {
+      int ls = ladder_start();
+      float lvl = pl_count_ > 0 ? level(pl_count_ - 1) : with_lid(win_.mean(), lid_off_);
+      float from = ls < pl_count_ ? std::min(ev_base(), level(ls)) : ev_base();
+      if (lvl - from >= cfg_.top_up_min_g && monotonic_from(ls)) lid_off_filled_ = true;
+    }
     // The lid is "off" but the box stands where it did with the lid on, and
     // nothing went in: the lid never came off (or went back on unseen). With
     // it off the box sits a lid's weight lower, and nothing a cat does lifts
@@ -1232,7 +1244,9 @@ class BoxMonitor {
     // cleaning (8 Nov: off from 11:48 on with the box back at its level).
     if (cfg_.lid_g > 0.0f && lid_off_ && !absent_ && !deep_clean_ && !std::isnan(lid_ref_g_)) {
       float actual = pl_count_ > 0 ? pl_[pl_count_ - 1].mean_g : win_.mean();
-      if (actual >= lid_ref_g_ - (cfg_.lid_g - cfg_.lid_tol_g) &&
+      // Unless it was topped up while off (scooped, then refilled, lid still
+      // off: that would read as the lid back and 485 g lost).
+      if (!lid_off_filled_ && actual >= lid_ref_g_ - (cfg_.lid_g - cfg_.lid_tol_g) &&
           actual <= lid_ref_g_ + cfg_.top_up_min_g) {
         lid_off_ = pl_lid_off_ = ev_lid_off_ = lid_on_pending_ = false;
         for (int i = 0; i < pl_count_; i++) pl_[i].lid_off = false;
@@ -1326,6 +1340,13 @@ class BoxMonitor {
    * this much more than lid_g + lid_tol_g is accepted as the lid.
    */
   static constexpr float LID_SCOOP_G = 150.0f;
+  /**
+   * Straight down from the lid-on level in one step, the lid plus at most
+   * this: a first scoopful can be out before the box first holds still (the
+   * biggest single scoop on record took 236 g), but a 1092 g weight lifted
+   * off the lid is not the lid (8 Nov).
+   */
+  static constexpr float LID_FIRST_SCOOP_G = 400.0f;
   /** A lid lifted off for a moment holds still for only a second or two. */
   static constexpr int LID_HOLD = HZ;
   /**
@@ -1394,7 +1415,8 @@ class BoxMonitor {
   float last_level_g_ = NAN;  // last level held LID_HOLD with the box on the board
   float lid_ref_g_ = NAN;     // where the box stands with the lid on (the level it came off from)
   bool ev_lid_off_ = false;   // lid state when the event began
-  bool lid_opened_ = false;   // the lid was off at some point this event
+  bool lid_opened_ = false;   // the lid came off or went on this event
+  bool lid_off_filled_ = false;  // litter was topped up since the lid came off
   int lid_off_n_ = -1;        // sample the lid was last seen coming off
   float lid_on_step_g_ = 0.0f;  // what the lid added going back on
   float trans_max_ = -INFINITY;  // hardest press since the last level
@@ -1434,6 +1456,8 @@ class BoxMonitor {
     lid_back_ = lid_off_n_ >= ev_start_ &&
                 with_lid(static_cast<float>(pl_mean_), false) - ev_base() < cfg_.top_up_min_g;
     lid_off_ = pl_lid_off_ = false;
+    lid_opened_ = true;
+    lid_off_filled_ = false;
     // What it actually added back, if that looks like the lid alone.
     lid_on_step_g_ = std::abs(d - cfg_.lid_g) <= cfg_.lid_tol_g ? d : cfg_.lid_g;
     lid_ref_g_ = static_cast<float>(pl_mean_);
@@ -1477,19 +1501,20 @@ class BoxMonitor {
       // The first level may still have the lid resting on the box or a hand
       // on it; once one holds a lid's weight below the start, it is off.
       // Straight down from the lid-on level in one step, only a lid's worth
-      // (plus a first scoopful) counts: more than that at once is something
+      // (plus a first scoopful, LID_FIRST_SCOOP_G) counts: more than that at once is something
       // else coming off, such as a weight set on the lid and lifted away
       // again (8 Nov: 1092 g off read as lid off + scoop). Via a level in
       // between (a hand still on the box, 21 Oct) it can be any amount.
       bool from_ref = !std::isnan(lid_ref_g_) && std::abs(last_level_g_ - lid_ref_g_) <= LEVEL_TOL;
       bool below = !std::isnan(lid_ref_g_) && g <= lid_ref_g_ - (cfg_.lid_g - tol) &&
-                   (!from_ref || g >= lid_ref_g_ - (cfg_.lid_g + tol + LID_SCOOP_G));
-      if (from_ref && g < lid_ref_g_ - (cfg_.lid_g + tol + LID_SCOOP_G)) {
+                   (!from_ref || g >= lid_ref_g_ - (cfg_.lid_g + tol + LID_FIRST_SCOOP_G));
+      if (from_ref && g < lid_ref_g_ - (cfg_.lid_g + tol + LID_FIRST_SCOOP_G)) {
         // Something else came off with the lid still on: it stands here now.
         lid_ref_g_ = g;
       } else if (step || below) {
         lid_off_ = pl_lid_off_ = lid_opened_ = true;
         lid_off_n_ = n_;
+        lid_off_filled_ = false;
         if (std::isnan(lid_ref_g_)) lid_ref_g_ = last_level_g_;
       }
     } else if ((d >= LID_ON_MIN_G && press >= LID_PRESS_G) ||
