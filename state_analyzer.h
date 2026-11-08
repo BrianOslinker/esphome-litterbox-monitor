@@ -1256,6 +1256,12 @@ class BoxMonitor {
     BoxEvent &r = result_;
     r.kind = BoxEventKind::NONE;
     r.level_g = pl_count_ > 0 ? level(pl_count_ - 1) : with_lid(win_.mean(), lid_off_);
+    // Ended the moment the lid went back on (take_lid_back): the box has held
+    // still at its new level for only a second or so, too short to close as
+    // a plateau, and the last closed one is from before the lid went on and
+    // the last scoopful came out (8 Nov 23:29: 105 g low). Take the new level.
+    if (!ended_stable && pl_n_ >= LID_HOLD && lid_level_ok_ && !pl_cat_ && !lid_off_)
+      r.level_g = with_lid(static_cast<float>(pl_mean_), pl_lid_off_);
     r.litter_added_g = 0.0f;
     r.box_measured_g = box_measured_g_;
     r.zero_error_g = zero_error_g_;
