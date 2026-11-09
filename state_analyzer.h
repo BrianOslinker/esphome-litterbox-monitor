@@ -16,6 +16,10 @@ static const int SA_MAX_CATS = 5;
 /** Zones open on OCCUPIED entry/exit and on delta overflow; a fidgety visit needs room. */
 static const int SA_MAX_ZONES = 256;
 static const float SA_URINATION_STD_DEV_THRESHOLD_G = 4.0f;
+/** In-box average: fewer settled seconds than this fall back to the steadiest stretch. */
+static const int SA_AVG_MIN_S = 40;
+/** In-box average: mean this far from the median means weight was held off. */
+static const float SA_AVG_STEP_G = 100.0f;
 static const int16_t SA_SCALE_ABS = 1;    // 1g, identical to previous behavior
 static const int16_t SA_SCALE_DELTA = 10; // 0.1g, used during OCCUPIED/ELIMINATING
 /**
@@ -53,6 +57,14 @@ enum class AnalyzerState : uint8_t {
   GAP
 };
 
+// How StateResult::cat_weight_avg was got.
+enum class WeightMethod : uint8_t {
+  NONE,      // no cat on the box
+  AVERAGE,   // in-box average: trimmed mean of 1 s medians, deposit subtracted
+  FALLBACK,  // under SA_AVG_MIN_S settled: the steadiest stretch's weight
+  REJECTED   // average and median disagree: weight held off mid-visit, no weight
+};
+
 enum class EliminationType : uint8_t {
   NO_ELIMINATION,
   URINATION,
@@ -75,7 +87,11 @@ struct StateTransition {
 };
 
 struct StateResult {
-  float cat_weight;
+  float cat_weight;  // the steadiest stretch (for Lucy usually her squat)
+  // What the device stores and recognises by: the cat averaged over its whole
+  // time on the box (0 when rejected). See StateAnalyzer::inbox_average().
+  float cat_weight_avg;
+  WeightMethod weight_method;
   float waste_weight;
   StatePeriod periods[SA_MAX_PERIODS];
   int period_count;
@@ -590,6 +606,7 @@ class StateAnalyzer {
             : classify_elimination(result_.periods, result_.period_count, std_dev_threshold);
 
     result_.detected_cat = cat;
+    inbox_average(buf);
 
     return result_;
   }
@@ -896,6 +913,81 @@ class StateAnalyzer {
       if (a_uri != b_uri) return EliminationType::BOTH;
     }
     return EliminationType::UNKNOWN;
+  }
+
+  /**
+   * Local: the cat's weight averaged over its time on the box (OCCUPIED and
+   * ELIMINATING samples), rather than the mean of its steadiest stretch,
+   * which for Lucy is her squat and reads heavy (8 Nov 23:32: 5.92 vs 5.83
+   * kg). The four corner cells disagree by up to ~7 % (bottle tests), so one
+   * posture is position-biased; averaging spreads it out. Over 56 visits it
+   * cut Lucy's visit-to-visit scatter from 72 to 48 g.
+   * Robust and in fixed memory: 10 %-trimmed mean of 1 s medians. The deposit (waste)
+   * is subtracted as it builds up: from nothing at the first eliminating
+   * period's start to all of it at the last one's end. Under SA_AVG_MIN_S of settled samples: the steadiest-stretch
+   * weight. Mean and median of the 1 s medians more than SA_AVG_STEP_G apart:
+   * part of the weight was held off mid-visit (8 Nov 21:41), no weight.
+   * Same rules as visit-logger's _inbox_kg (ha-stack bca7eee), which trims
+   * 10 % of the sorted samples themselves (no room for that here).
+   */
+  void inbox_average(const WeightBuffer &buf) {
+    StateResult &r = result_;
+    r.cat_weight_avg = 0.0f;
+    r.weight_method = WeightMethod::NONE;
+    if (r.detected_cat < 0) return;
+    float *med = sa_motion_rms_scratch();  // free again: std devs are done
+    int nmed = 0, settled = 0;
+    // The deposit builds up over the eliminating periods (a 30 s pee is on
+    // the scale bit by bit): none of it at their start, all of it by their end.
+    int elim_start = -1, elim_end = -1;
+    for (int k = 0; k < r.period_count; k++)
+      if (r.periods[k].state == AnalyzerState::ELIMINATING) {
+        if (elim_start < 0) elim_start = r.periods[k].start;
+        elim_end = r.periods[k].end;
+      }
+    float deposit = waste_weight_ > 0.0f ? waste_weight_ : 0.0f;
+    for (int k = 0; k < r.period_count; k++) {
+      const StatePeriod &p = r.periods[k];
+      if (p.state != AnalyzerState::OCCUPIED && p.state != AnalyzerState::ELIMINATING) continue;
+      int e = std::min(p.end, buf.count());
+      for (int i = std::max(p.start, 0); i < e; i += HZ) {
+        int n = std::min(HZ, e - i);
+        float w[HZ];
+        for (int j = 0; j < n; j++) {
+          // The buffer holds readings against the event's tare; the cat is
+          // weighed from what sat on the box when it got in.
+          w[j] = buf.sample_to_grams(i + j) - pre_entry_g_;
+          int at = i + j;
+          if (elim_start >= 0 && at >= elim_end) w[j] -= deposit;
+          else if (elim_start >= 0 && at > elim_start)
+            w[j] -= deposit * static_cast<float>(at - elim_start) / static_cast<float>(elim_end - elim_start);
+        }
+        settled += n;
+        if (n < HZ / 2 || nmed >= SA_MAX_MOTION_WINDOWS) continue;
+        std::sort(w, w + n);
+        med[nmed++] = n % 2 ? w[n / 2] : 0.5f * (w[n / 2 - 1] + w[n / 2]);
+      }
+    }
+    if (settled < SA_AVG_MIN_S * HZ || nmed == 0) {
+      r.cat_weight_avg = r.cat_weight;
+      r.weight_method = WeightMethod::FALLBACK;
+      return;
+    }
+    // Trimmed mean (10 % off each end) of the 1 s medians: a cat with its
+    // front paws on the rim for a few seconds (25 Oct 21:29, 14 s at 4-6 kg)
+    // drags a plain mean 265 g low.
+    std::sort(med, med + nmed);
+    int trim = nmed / 10;
+    float sum = 0.0f;
+    for (int k = trim; k < nmed - trim; k++) sum += med[k];
+    float mean = sum / static_cast<float>(nmed - 2 * trim);
+    float median = nmed % 2 ? med[nmed / 2] : 0.5f * (med[nmed / 2 - 1] + med[nmed / 2]);
+    if (std::abs(mean - median) > SA_AVG_STEP_G) {
+      r.weight_method = WeightMethod::REJECTED;
+      return;
+    }
+    r.cat_weight_avg = mean;
+    r.weight_method = WeightMethod::AVERAGE;
   }
 
   // Local: set_duration_rule's verdict - the longest eliminating stretch.
@@ -1632,6 +1724,16 @@ inline const char *analyzer_state_str(AnalyzerState s) {
     case AnalyzerState::GAP:         return "gap";
   }
   return "unknown";
+}
+
+inline const char *weight_method_str(WeightMethod m) {
+  switch (m) {
+    case WeightMethod::NONE:     return "none";
+    case WeightMethod::AVERAGE:  return "avg";
+    case WeightMethod::FALLBACK: return "fallback";
+    case WeightMethod::REJECTED: return "rejected";
+  }
+  return "none";
 }
 
 inline const char *elimination_type_str(EliminationType t) {

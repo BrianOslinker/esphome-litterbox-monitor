@@ -1548,8 +1548,9 @@ script:
             visit = &get_analyzer().finalize(
                 get_weight_buf(), id(cat_weights), 5,
                 id(elimination_std_dev_threshold).state);
-            ESP_LOGI("SA", "Event: cat=%.0fg waste=%.0fg type=%s cat_idx=%d periods=%d dur=%ds",
-                     visit->cat_weight, visit->waste_weight,
+            ESP_LOGI("SA", "Event: cat=%.0fg avg=%.0fg (%s) waste=%.0fg type=%s cat_idx=%d periods=%d dur=%ds",
+                     visit->cat_weight, visit->cat_weight_avg, weight_method_str(visit->weight_method),
+                     visit->waste_weight,
                      elimination_type_str(visit->elimination_type),
                      visit->detected_cat, visit->period_count, duration);
           } else {
@@ -1642,8 +1643,10 @@ script:
 
             if (cat_event && !low_end) {
               int ci = result.detected_cat;
-              if (result.cat_weight > 0.0f) {
-                id(cat_weights)[ci] = result.cat_weight / 1000.0f;
+              // The in-box average, not the steadiest stretch (a squat reads
+              // heavy). Rejected (weight held off mid-visit): keep the old one.
+              if (result.weight_method != WeightMethod::REJECTED && result.cat_weight_avg > 0.0f) {
+                id(cat_weights)[ci] = result.cat_weight_avg / 1000.0f;
               }
               if (!continued) {
                 id(cat_daily_visits)[ci]++;

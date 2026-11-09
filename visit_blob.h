@@ -191,9 +191,10 @@ class VisitRecorder {
 
     if (e.visit) {
       const StateResult &v = *e.visit;
-      w.printf("\"visit\":{\"cat_weight\":%.9g,\"waste_weight\":%.9g,\"type\":\"%s\",\"cat\":%d,"
-               "\"periods\":[",
-               v.cat_weight, v.waste_weight, elimination_type_str(v.elimination_type), v.detected_cat);
+      w.printf("\"visit\":{\"cat_weight\":%.9g,\"cat_weight_avg\":%.9g,\"weight_method\":\"%s\","
+               "\"waste_weight\":%.9g,\"type\":\"%s\",\"cat\":%d,\"periods\":[",
+               v.cat_weight, v.cat_weight_avg, weight_method_str(v.weight_method), v.waste_weight,
+               elimination_type_str(v.elimination_type), v.detected_cat);
       for (int i = 0; i < v.period_count; i++) {
         const StatePeriod &p = v.periods[i];
         w.printf(i ? ",[\"%s\",%d,%d,%.9g]" : "[\"%s\",%d,%d,%.9g]", analyzer_state_str(p.state), p.start,
