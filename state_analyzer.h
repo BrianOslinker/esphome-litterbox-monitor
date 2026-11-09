@@ -106,6 +106,11 @@ struct ZoneEntry {
 };
 
 // Ring buffer for rolling statistics over a fixed window.
+/** Median of a sorted array (mean of the middle two for an even count); n > 0. */
+static inline float sa_sorted_median(const float *s, int n) {
+  return n % 2 ? s[n / 2] : 0.5f * (s[n / 2 - 1] + s[n / 2]);
+}
+
 class Ring {
  public:
   Ring() : n_(0), i_(0), filled_(0) { memset(buf_, 0, sizeof(buf_)); }
@@ -133,7 +138,7 @@ class Ring {
     float tmp[MAX_RING];
     memcpy(tmp, buf_, sizeof(float) * filled_);
     std::sort(tmp, tmp + filled_);
-    return filled_ % 2 ? tmp[filled_ / 2] : 0.5f * (tmp[filled_ / 2 - 1] + tmp[filled_ / 2]);
+    return sa_sorted_median(tmp, filled_);
   }
 
   // Sample variance (divides by n-1)
@@ -434,16 +439,16 @@ class StateAnalyzer {
     // filter the same way. 100 ms of delay.
     {
       float g = weight;
-      if (std::isnan(med_d1_)) {
+      if (std::isnan(prev1_)) {
         weight = g;
       } else {
-        weight = med_d1_;
-        if (!std::isnan(med_d2_) && std::abs(g - med_d2_) <= GLITCH_PAIR_G &&
-            std::abs(med_d1_ - 0.5f * (g + med_d2_)) > GLITCH_G)
-          weight = 0.5f * (g + med_d2_);
+        weight = prev1_;
+        if (!std::isnan(prev2_) && std::abs(g - prev2_) <= GLITCH_PAIR_G &&
+            std::abs(prev1_ - 0.5f * (g + prev2_)) > GLITCH_G)
+          weight = 0.5f * (g + prev2_);
       }
-      med_d2_ = med_d1_;
-      med_d1_ = g;
+      prev2_ = prev1_;
+      prev1_ = g;
     }
     // Everything below is measured from what sat on the box just before the
     // cat got in. current_weight_g_ stays raw: the weight buffer's zones are.
@@ -634,8 +639,8 @@ class StateAnalyzer {
     pre_still_ = 0;
     cat_seen_ = false;
     waste_set_ = false;
-    med_d1_ = NAN;
-    med_d2_ = NAN;
+    prev1_ = NAN;
+    prev2_ = NAN;
   }
 
   AnalyzerState current_state() const { return state_; }
@@ -713,8 +718,8 @@ class StateAnalyzer {
   int pre_still_ = 0;
   bool cat_seen_ = false;  // OCCUPIED reached: the baseline is frozen
   bool waste_set_ = false;
-  float med_d1_ = NAN;  // previous two raw readings, for the glitch check
-  float med_d2_ = NAN;
+  float prev1_ = NAN;  // previous two raw readings, for the glitch check
+  float prev2_ = NAN;
   // A glitch: the reading sits over GLITCH_G from its neighbours' mean while
   // they agree within GLITCH_PAIR_G. Cat jolts span several samples.
   static constexpr float GLITCH_G = 250.0f;
@@ -965,7 +970,7 @@ class StateAnalyzer {
         settled += n;
         if (n < HZ / 2 || nmed >= SA_MAX_MOTION_WINDOWS) continue;
         std::sort(w, w + n);
-        med[nmed++] = n % 2 ? w[n / 2] : 0.5f * (w[n / 2 - 1] + w[n / 2]);
+        med[nmed++] = sa_sorted_median(w, n);
       }
     }
     if (settled < SA_AVG_MIN_S * HZ || nmed == 0) {
@@ -981,7 +986,7 @@ class StateAnalyzer {
     float sum = 0.0f;
     for (int k = trim; k < nmed - trim; k++) sum += med[k];
     float mean = sum / static_cast<float>(nmed - 2 * trim);
-    float median = nmed % 2 ? med[nmed / 2] : 0.5f * (med[nmed / 2 - 1] + med[nmed / 2]);
+    float median = sa_sorted_median(med, nmed);
     if (std::abs(mean - median) > SA_AVG_STEP_G) {
       r.weight_method = WeightMethod::REJECTED;
       return;
@@ -1158,8 +1163,7 @@ class BoxMonitor {
     float s[PROBE_MAX_SLICES];
     std::copy(probe_maxes_, probe_maxes_ + probe_slices_, s);
     std::sort(s, s + probe_slices_);
-    int k = probe_slices_ / 2;
-    return probe_slices_ % 2 ? s[k] : 0.5f * (s[k - 1] + s[k]);
+    return sa_sorted_median(s, probe_slices_);
   }
 
   /**
