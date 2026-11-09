@@ -430,6 +430,18 @@ wifi:
 
 captive_portal:
 
+# Local: built-in web page, so Calibrate Scale / Calibration Known Weight and
+# the rest can be used from a phone on the fallback hotspot (192.168.4.1)
+# when the scale is away from home Wi-Fi, e.g. at the bench (2026-11-09).
+# `local: true` embeds the page's JS, so it works with no internet.
+web_server:
+  port: 80
+  version: 3
+  local: true
+  auth:
+    username: admin
+    password: !secret litterbox_ap_password
+
 time:
   - platform: homeassistant
     timezone: ${timezone}
