@@ -417,9 +417,10 @@ mqtt:
 ota:
   - platform: esphome
     encryption:
-    # Lets `esphome upload --partition-table` replace the partition table over
-    # the air, for upstream #12's visit journal partition (2026-10-21).
-    allow_partition_access: true
+    # Off: an upload can't rewrite the partition table. It was on only for
+    # the one-off move to upstream #12's journal table (2026-10-21). To change
+    # the table again, add `allow_partition_access: true`, install that build,
+    # then run `esphome upload --partition-table`.
 
 wifi:
   ssid: !secret wifi_ssid
@@ -438,9 +439,11 @@ web_server:
   port: 80
   version: 3
   local: true
+  # It also answers on home Wi-Fi (plain HTTP), so it has its own password
+  # rather than the hotspot's.
   auth:
     username: admin
-    password: !secret litterbox_ap_password
+    password: !secret litterbox_web_password
 
 time:
   - platform: homeassistant

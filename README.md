@@ -100,6 +100,7 @@ YAML to match your wiring.
 
 2. Create a `secrets.yaml` next to them defining:
    `wifi_ssid`, `wifi_password`, `litterbox_api_key`, `litterbox_ap_password`,
+   `litterbox_web_password` (the built-in web page's login, user `admin`),
    `mqtt_broker` (host or IP of an MQTT broker), `mqtt_username` and
    `mqtt_password`. (Updates are encrypted with the API key, so no separate
    OTA password is needed.) Home Assistant talks to the device over the
@@ -133,6 +134,9 @@ YAML to match your wiring.
    esphome upload litterbox-monitor.yaml --partition-table --device litterbox.local
    esphome upload litterbox-monitor.yaml --device litterbox.local
    ```
+
+   Then take `allow_partition_access` out again and install once more, so
+   later uploads can't rewrite the table.
 
    The device checks the table before writing anything and copies the
    running firmware into a slot that exists in the new table if it has to.
