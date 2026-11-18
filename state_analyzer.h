@@ -704,8 +704,10 @@ class StateAnalyzer {
           tmp[i].state == AnalyzerState::OCCUPIED &&
           tmp[i + 1].state == AnalyzerState::ELIMINATING &&
           (tmp[i].end - tmp[i].start) < (int)STABLE_MERGE_GAP &&
-          (tmp[i - 1].end - tmp[i - 1].start) > HZ &&
-          (tmp[i + 1].end - tmp[i + 1].start) > HZ) {
+          // At least 1 s each side (was "more than 1 s"): a still stretch
+          // held for exactly 1.0 s after a twitch was left unmerged.
+          (tmp[i - 1].end - tmp[i - 1].start) >= HZ &&
+          (tmp[i + 1].end - tmp[i + 1].start) >= HZ) {
         tmp[i - 1].end = tmp[i + 1].end;
         for (int j = i; j < n - 2; j++) tmp[j] = tmp[j + 2];
         n -= 2;
